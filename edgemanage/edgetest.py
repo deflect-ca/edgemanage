@@ -7,6 +7,8 @@ from __future__ import absolute_import
 import six.moves.urllib.parse
 import hashlib
 import logging
+import socket
+import dns.resolver
 
 # local
 from edgemanage import const
@@ -63,15 +65,27 @@ class EdgeTest(object):
         self.edgename = edgename
         self.local_sum = local_sum
 
+    def dns_resolve(self, edgename):
+        """
+         Resolve edgename to IP
+        """
+        dns_resolver = dns.resolver.Resolver()
+        answer = dns_resolver.resolve(edgename, "A")
+        for record in answer:
+            return str(record)
+
     def make_request(self, fetch_host, fetch_object, proto, port, verify):
         """
          make HTTP request via `requests`
         """
-        request_url = six.moves.urllib.parse.urljoin(
-            proto + "://" + self.edgename + ":" + str(port), fetch_object)
-        return requests.get(request_url, verify=verify, timeout=const.FETCH_TIMEOUT,
-                            headers={"Host": fetch_host, "User-Agent": USER_AGENT})
-        pass
+        edge_ip = self.dns_resolve(self.edgename)
+        logging.info("Resolving %s to %s", self.edgename, edge_ip)
+
+        with OverrideDNS(fetch_host, edge_ip):
+            request_url = six.moves.urllib.parse.urljoin(
+                proto + "://" + fetch_host + ":" + str(port), fetch_object)
+            return requests.get(request_url, verify=verify, timeout=const.FETCH_TIMEOUT,
+                                headers={"User-Agent": USER_AGENT})
 
     def fetch(self, fetch_host, fetch_object, proto="https", port=80, verify=False):
         """
@@ -113,3 +127,26 @@ class EdgeTest(object):
             raise VerifyFailed(self, fetch_host, fetch_object, remote_hash)
 
         return response.elapsed.total_seconds()
+
+
+class OverrideDNS(object):
+    """
+    Context manager to temporaily override the resolution of DNS
+    """
+    def __init__(self, hostname, ip_address):
+        logging.info("Overriding DNS resolution for %s to %s", hostname, ip_address)
+        self.hostname = hostname
+        self.ip_address = ip_address
+
+    def getaddrinfo(self, *args):
+        if args[0] == self.hostname:
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', (self.ip_address, args[1]))]
+        else:
+            return self.orig_getaddrinfo(*args)
+
+    def __enter__(self):
+        self.orig_getaddrinfo = socket.getaddrinfo
+        socket.getaddrinfo = self.getaddrinfo
+
+    def __exit__(self, *args):
+        socket.getaddrinfo = self.orig_getaddrinfo
