@@ -19,7 +19,8 @@ setup(
         "pyyaml",
         "requests",
         "ipaddr",
-        "six"
+        "six",
+        "dnspython",
     ],
     classifiers=[
         "Development Status :: 5 - Production/Stable",
