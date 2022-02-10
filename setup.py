@@ -20,7 +20,6 @@ setup(
         "requests",
         "ipaddr",
         "six",
-        "dnspython",
     ],
     classifiers=[
         "Development Status :: 5 - Production/Stable",

@@ -8,7 +8,6 @@ import six.moves.urllib.parse
 import hashlib
 import logging
 import socket
-import dns.resolver
 
 # local
 from edgemanage import const
@@ -65,20 +64,11 @@ class EdgeTest(object):
         self.edgename = edgename
         self.local_sum = local_sum
 
-    def dns_resolve(self, edgename):
-        """
-         Resolve edgename to IP
-        """
-        dns_resolver = dns.resolver.Resolver()
-        answer = dns_resolver.resolve(edgename, "A")
-        for record in answer:
-            return str(record)
-
     def make_request(self, fetch_host, fetch_object, proto, port, verify):
         """
          make HTTP request via `requests`
         """
-        edge_ip = self.dns_resolve(self.edgename)
+        edge_ip = socket.gethostbyname(self.edgename)
         logging.info("Resolving %s to %s", self.edgename, edge_ip)
 
         with OverrideDNS(fetch_host, edge_ip):
