@@ -19,7 +19,7 @@ setup(
         "pyyaml",
         "requests",
         "ipaddr",
-        "six"
+        "six",
     ],
     classifiers=[
         "Development Status :: 5 - Production/Stable",

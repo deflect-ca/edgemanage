@@ -244,7 +244,7 @@ if __name__ == "__main__":
         if os.path.isfile(canary_path):
             logging.debug("Loading canary file from %s", canary_path)
             with open(canary_path) as canary_f:
-                canary_data = yaml.load(canary_f.read())
+                canary_data = yaml.load(canary_f.read(), Loader=yaml.SafeLoader)
                 logging.debug("Canary data is %s", str(canary_data))
 
     if canary_data:
