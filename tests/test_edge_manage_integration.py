@@ -32,7 +32,7 @@ class EdgeManageIntegration(unittest.TestCase):
         Rewrite the default config file to use this test environment.
         """
         with open('conf/edgemanage.yaml') as default_conf:
-            config = yaml.load(default_conf.read())
+            config = yaml.load(default_conf.read(), Loader=yaml.BaseLoader)
 
         # Configure the test object
         config['testobject']['proto'] = 'http'
@@ -90,7 +90,7 @@ class EdgeManageIntegration(unittest.TestCase):
             filename = health_file_path.split('/')[-1]
             edge_ip = filename.split('.edgestore')[0]
             with open(health_file_path, 'r') as health_file:
-                edge_data = yaml.load(health_file.read())
+                edge_data = yaml.load(health_file.read(), Loader=yaml.BaseLoader)
 
                 # Load the most recent fetch time measurement
                 most_recent_fetch = sorted(edge_data['fetch_times'])[0]
@@ -106,7 +106,7 @@ class EdgeManageIntegration(unittest.TestCase):
         Parse the state file generate by edge_manage
         """
         with open('%s/%s.state' % (self.edge_data_dir, DNET_NAME), 'r') as state_file:
-            return yaml.load(state_file.read())
+            return yaml.load(state_file.read(), Loader=yaml.BaseLoader)
 
     def spawn_web_server(self, config_file=None, test_object=None):
         """
