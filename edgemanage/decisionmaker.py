@@ -4,6 +4,7 @@ Module for making judgement on whether a givin edge passed threshold
 
 from __future__ import absolute_import
 from . import const
+from .util import Monitor
 
 import logging
 import time
@@ -100,11 +101,17 @@ class DecisionMaker(object):
                 logging.debug("Analysing %s. Last val: %f, time slice: %f, average: %f",
                               edgename, edge_state.last_value(), time_slice_avg,
                               edge_state.current_average())
+                Monitor().set(edgename, "response_time", edge_state.last_value())
+                Monitor().set(edgename, "average_time", edge_state.current_average())
+                Monitor().set(edgename, "timeslice", time_slice_avg)
             else:
                 time_slice_avg = None
                 logging.debug("Analysing %s. Last val: %f, time slice: Not enough data, "
                               "average: %f",
                               edgename, edge_state.last_value(), edge_state.current_average())
+                Monitor().set(edgename, "response_time", edge_state.last_value())
+                Monitor().set(edgename, "average_time", edge_state.current_average())
+                Monitor().set(edgename, "timeslice", -1)
 
             if edge_state.last_value() < good_enough:
                 self.current_judgement[edgename] = "pass_threshold"
