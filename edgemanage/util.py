@@ -7,6 +7,7 @@ import os
 import tempfile as tmp
 import fcntl
 from contextlib import contextmanager
+from prometheus_client import CollectorRegistry, Gauge, write_to_textfile
 
 
 def acquire_lock(lockfile):
@@ -77,3 +78,40 @@ def open_atomic(filepath, fsync=False, **kwargs):
                     file.flush()
                     os.fsync(file.fileno())
         os.rename(tmppath, filepath)
+
+
+class Monitor(object):
+    """ Prometheus metrics monitor """
+    gauges = {}
+    suffixs = [
+        'response_time',
+        'average_time',
+        'timeslice',
+        'reachable_status',
+        'in_rotation',
+    ]
+
+    def __init__(self, edges, registry=None):
+        if registry is None:
+            self.registry = CollectorRegistry()
+        self.create_gauges(edges)
+
+    def create_gauges(self, edges):
+        for edge in edges:
+            edge_name = edge.replace('.', '_')
+            for suffix in self.suffixs:
+                self.gauges[f"{edge_name}_{suffix}"] = Gauge(
+                    f"{edge_name}_{suffix}", '',
+                    registry=self.registry
+                )
+
+    def set(self, edge, suffix, value):
+        edge_name = edge.replace('.', '_')
+        self.gauges[f"{edge_name}_{suffix}"].set(value)
+
+    def inc(self, edge, suffix):
+        edge_name = edge.replace('.', '_')
+        self.gauges[f"{edge_name}_{suffix}"].inc()
+
+    def write_metrics(self, filepath):
+        write_to_textfile(filepath, self.registry)
