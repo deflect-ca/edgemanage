@@ -80,15 +80,24 @@ def open_atomic(filepath, fsync=False, **kwargs):
         os.rename(tmppath, filepath)
 
 class SingletonMetaclass(type):
+    """
+    Singleton metaclass to enable Monitor class
+    to be used accross different modules
+    """
     _instances = {}
     def __call__(cls, *args, **kwargs):
         if cls not in cls._instances:
             cls._instances[cls] = super().__call__(*args, **kwargs)
+        # return instance so we can call Monitor().set()
         return cls._instances[cls]
 
 
 class Monitor(metaclass=SingletonMetaclass):
-    """ Prometheus metrics monitor """
+    """
+    Prometheus metrics monitor
+    """
+
+    # gauges array with key like: edge1_dev_deflect_network_response_time
     gauges = {}
     suffixs = [
         'response_time',
@@ -105,20 +114,19 @@ class Monitor(metaclass=SingletonMetaclass):
 
     def create_gauges(self, edges):
         for edge in edges:
-            edge_name = edge.replace('.', '_')
             for suffix in self.suffixs:
-                self.gauges[f"{edge_name}_{suffix}"] = Gauge(
-                    f"{edge_name}_{suffix}", '',
-                    registry=self.registry
-                )
+                key= f"{self._format(edge)}_{suffix}"
+                self.gauges[key] = Gauge(key, '', registry=self.registry)
 
     def set(self, edge, suffix, value):
-        edge_name = edge.replace('.', '_')
-        self.gauges[f"{edge_name}_{suffix}"].set(value)
+        self.gauges[f"{self._format(edge)}_{suffix}"].set(value)
 
     def inc(self, edge, suffix):
-        edge_name = edge.replace('.', '_')
-        self.gauges[f"{edge_name}_{suffix}"].inc()
+        self.gauges[f"{self._format(edge)}_{suffix}"].inc()
+
+    def _format(self, edge):
+        # Replace . in edge URL so it can be used as a metric name
+        return edge.replace('.', '_')
 
     def write_metrics(self, filepath):
         write_to_textfile(filepath, self.registry)
