@@ -4,7 +4,7 @@ Module for making judgement on whether a givin edge passed threshold
 
 from __future__ import absolute_import
 from . import const
-from .util import Monitor
+from edgemanage.monitor import Monitor
 
 import logging
 import time

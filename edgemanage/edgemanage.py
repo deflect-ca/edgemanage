@@ -8,7 +8,7 @@ Main entry point of edgemanage, imported by edge_manage binary
 from __future__ import absolute_import
 from edgemanage.edgetest import EdgeTest, VerifyFailed, FetchFailed
 from edgemanage import EdgeState, DecisionMaker, EdgeList, const
-from .util import Monitor
+from edgemanage.monitor import Monitor
 
 from concurrent.futures import ThreadPoolExecutor, as_completed, CancelledError
 import itertools
