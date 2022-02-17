@@ -45,10 +45,9 @@ class Monitor(metaclass=SingletonMetaclass):
                 self.gauges[key] = Gauge(key, '', registry=self.registry)
 
     def set(self, edge, suffix, value):
-        self.gauges[f"{self._format(edge)}_{suffix}"].set(value)
-
-    def inc(self, edge, suffix):
-        self.gauges[f"{self._format(edge)}_{suffix}"].inc()
+        key = f"{self._format(edge)}_{suffix}"
+        if key in self.gauges:
+            self.gauges[key].set(value)
 
     def _format(self, edge):
         # Replace . in edge URL so it can be used as a metric name
