@@ -167,7 +167,9 @@ def main(dnet, dry_run, config, state_obj,
             run_after_changes_section = config["commands"].get("run_after_changes", [])
             run_command_list(run_after_changes_section)
 
-    monitor.write_metrics('metric.prom')
+    metric_path = os.path.join(
+        config.get('prometheus_logs', '/var/log/prom/'), 'edgemanage.prom')
+    monitor.write_metrics(metric_path)
 
 
 if __name__ == "__main__":

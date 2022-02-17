@@ -129,4 +129,8 @@ class Monitor(metaclass=SingletonMetaclass):
         return edge.replace('.', '_')
 
     def write_metrics(self, filepath):
-        write_to_textfile(filepath, self.registry)
+        try:
+            write_to_textfile(filepath, self.registry)
+        except FileNotFoundError as e:
+            print(str(e))
+            print("Please set path at 'prometheus_logs' in edgemanage.conf")
