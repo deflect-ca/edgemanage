@@ -135,6 +135,7 @@ class EdgeManageIntegration(unittest.TestCase):
         em_process = pexpect.spawn(' '.join(edge_manage_command), timeout=60)
         em_process.expect(pexpect.EOF)
         em_process.close()
+        print(em_process.before)
         self.assertEqual(em_process.exitstatus, 0)
         self.running_time = time.time() - start_time
 

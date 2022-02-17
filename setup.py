@@ -20,6 +20,7 @@ setup(
         "requests",
         "ipaddr",
         "six",
+        "prometheus_client"
     ],
     classifiers=[
         "Development Status :: 5 - Production/Stable",

@@ -8,6 +8,7 @@ Main entry point of edgemanage, imported by edge_manage binary
 from __future__ import absolute_import
 from edgemanage.edgetest import EdgeTest, VerifyFailed, FetchFailed
 from edgemanage import EdgeState, DecisionMaker, EdgeList, const
+from edgemanage.monitor import Monitor
 
 from concurrent.futures import ThreadPoolExecutor, as_completed, CancelledError
 import itertools
@@ -419,6 +420,9 @@ class EdgeManage(object):
             logging.info("Successfully established %d edges: %s",
                          self.edgelist_obj.get_live_count(),
                          self.edgelist_obj.get_live_edges())
+
+            for live_edge in self.edgelist_obj.get_live_edges():
+                Monitor().set(live_edge, "in_rotation", 1)
 
             # Iterate over every *zone file in the zonetemplate dir and write out files.
             # (current_mtimes is an array that associates a zone name to its

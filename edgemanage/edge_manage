@@ -11,6 +11,7 @@ zone file for DNS server
 
 from __future__ import absolute_import
 from edgemanage import const, EdgeManage, StateFile, util
+from edgemanage.monitor import Monitor
 
 import argparse
 import json
@@ -124,6 +125,8 @@ def main(dnet, dry_run, config, state_obj,
                      if i.strip() and not i.startswith("#")]
         logging.info("Edge list is %s", str(edge_list))
 
+    monitor = Monitor(edge_list)
+
     # Load or create our edge state files
     for edge in edge_list:
         edgemanage_object.add_edge_state(edge, config["healthdata_store"],
@@ -164,6 +167,10 @@ def main(dnet, dry_run, config, state_obj,
         if any_changes:
             run_after_changes_section = config["commands"].get("run_after_changes", [])
             run_command_list(run_after_changes_section)
+
+    metric_path = os.path.join(
+        config.get('prometheus_logs', '/var/log/prom/'), 'edgemanage.prom')
+    monitor.write_metrics(metric_path)
 
 
 if __name__ == "__main__":
