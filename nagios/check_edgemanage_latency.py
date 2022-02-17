@@ -43,7 +43,7 @@ class CheckLatency(object):
         worst_latency = None
         nagios_status = 0
         edge_name = None
-        for edge_name, fetch_value in self.latency_map.iteritems():
+        for edge_name, fetch_value in self.latency_map.items():
             if not worst_latency or fetch_value > worst_latency:
                 worst_latency = fetch_value
                 edge_name = edge_name
@@ -95,5 +95,5 @@ if __name__ == "__main__":
 
     c = CheckLatency(config["healthdata_store"], edge_list, args.all, verbose=args.verbose)
     status, message = c.check_rotation(args.warn, args.crit)
-    print message
+    print(message)
     sys.exit(status)
