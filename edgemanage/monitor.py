@@ -55,7 +55,8 @@ class Monitor(metaclass=SingletonMetaclass):
         if self._is_ip(edge):
             # hash the IP to turn it as a valid metric name
             # this is usually for test
-            return self._md5_short(edge)
+            # force a prefix so it always will not start with number
+            return 'md5' + self._md5_short(edge)
         # Replace . in edge URL so it can be used as a metric name
         return edge.replace('.', '_')
 
