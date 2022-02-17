@@ -4,3 +4,4 @@ PyYAML
 requests
 setproctitle==1.1.10
 six
+prometheus_client=0.13.1
