@@ -1,3 +1,5 @@
+import socket
+import hashlib
 from prometheus_client import CollectorRegistry, Gauge, write_to_textfile
 
 
@@ -50,8 +52,25 @@ class Monitor(metaclass=SingletonMetaclass):
             self.gauges[key].set(value)
 
     def _format(self, edge):
+        if self._is_ip(edge):
+            # hash the IP to turn it as a valid metric name
+            # this is usually for test
+            return self._md5_short(edge)
         # Replace . in edge URL so it can be used as a metric name
         return edge.replace('.', '_')
+
+    def _is_ip(self, target):
+        try:
+            socket.inet_aton(target)
+            return True
+        except socket.error:
+            pass
+        return False
+
+    def _md5_short(self, data):
+        md5 = hashlib.md5()
+        md5.update(data.encode('utf-8'))
+        return md5.hexdigest()[:6]
 
     def write_metrics(self, filepath):
         try:
