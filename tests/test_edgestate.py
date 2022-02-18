@@ -19,10 +19,17 @@ class EdgeStateTemplate(unittest.TestCase):
     """
     Sub-classable test to handle state file generation and cleanup
     """
+
     def _make_store(self):
         self.store_dir = tempfile.mkdtemp()
         a = edgemanage.edgestate.EdgeState(TEST_EDGE, self.store_dir)
         return a
+
+    def _reopen_store(self, edgename, store_dir=None):
+        if not store_dir:
+            store_dir = self.store_dir
+        b = edgemanage.edgestate.EdgeState(edgename, store_dir)
+        return b
 
     def tearDown(self):
         shutil.rmtree(self.store_dir)
