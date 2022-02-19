@@ -67,6 +67,25 @@ class EdgeStateTest(EdgeStateTemplate):
 
         self.assertEqual(len(a.historical_average), TEST_FETCH_HISTORY + 1)
 
+    def testHistoricalAverageRotationAfterReloadingTheStateFile(self):
+        """
+        This test detects serialization issues when the rotation of
+        historical average records is performed on reloaded files
+        """
+
+        a = self._make_store()
+        minute_zero_ts = 1645210800  # 2022-02-18 19:00:00 UTC
+
+        for i in range(TEST_FETCH_HISTORY * 2):
+            a.add_value(2, timestamp=(minute_zero_ts + i / 100))
+
+        b = self._reopen_store(a.edgename)
+        minute_zero_ts = minute_zero_ts + 3600  # 2022-02-18 20:00:00 UTC
+        for i in range(TEST_FETCH_HISTORY * 2):
+            b.add_value(2, timestamp=(minute_zero_ts + i / 100))
+
+        self.assertEqual(len(b.historical_average), TEST_FETCH_HISTORY + 1)
+
 
 if __name__ == '__main__':
     unittest.main()
