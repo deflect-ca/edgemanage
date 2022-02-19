@@ -50,7 +50,7 @@ class EdgeStateTest(EdgeStateTemplate):
     def testStoreRotation(self):
         a = self._make_store()
 
-        for i in range(TEST_FETCH_HISTORY+1):
+        for i in range(TEST_FETCH_HISTORY + 1):
             a.add_value(2)
             time.sleep(0.01)
 
@@ -87,5 +87,5 @@ class EdgeStateTest(EdgeStateTemplate):
         self.assertEqual(len(b.historical_average), TEST_FETCH_HISTORY + 1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
