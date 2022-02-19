@@ -56,6 +56,17 @@ class EdgeStateTest(EdgeStateTemplate):
 
         self.assertEqual(len(a), TEST_FETCH_HISTORY)
 
+    def testHistoricalAverageRotation(self):
+        a = self._make_store()
+
+        # A fixed datetime with minutes in zero is used to force the rotation
+        minute_zero_ts = 1645210800  # 2022-02-18 19:00:00 UTC
+
+        for i in range(TEST_FETCH_HISTORY * 2):
+            a.add_value(2, timestamp=(minute_zero_ts + i / 100))
+
+        self.assertEqual(len(a.historical_average), TEST_FETCH_HISTORY + 1)
+
 
 if __name__ == '__main__':
     unittest.main()
