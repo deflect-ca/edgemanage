@@ -198,7 +198,7 @@ class EdgeState(object):
             if len(self.historical_average) > FETCH_HISTORY:
                 min_value = sorted(self.historical_average.keys())[0]
                 del(self.historical_average[min_value])
-            self.historical_average[the_time] = self.current_average()
+            self.historical_average[str(the_time)] = self.current_average()
 
         self._dump()
         return the_time
