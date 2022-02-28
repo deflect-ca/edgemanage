@@ -4,6 +4,7 @@ Module for making judgement on whether a givin edge passed threshold
 
 from __future__ import absolute_import
 from . import const
+from edgemanage.monitor import Monitor
 
 import logging
 import time
@@ -100,17 +101,24 @@ class DecisionMaker(object):
                 logging.debug("Analysing %s. Last val: %f, time slice: %f, average: %f",
                               edgename, edge_state.last_value(), time_slice_avg,
                               edge_state.current_average())
+                Monitor().set(edgename, "response_time", edge_state.last_value())
+                Monitor().set(edgename, "average_time", edge_state.current_average())
+                Monitor().set(edgename, "timeslice", time_slice_avg)
             else:
                 time_slice_avg = None
                 logging.debug("Analysing %s. Last val: %f, time slice: Not enough data, "
                               "average: %f",
                               edgename, edge_state.last_value(), edge_state.current_average())
+                Monitor().set(edgename, "response_time", edge_state.last_value())
+                Monitor().set(edgename, "average_time", edge_state.current_average())
+                Monitor().set(edgename, "timeslice", -1)
 
             if edge_state.last_value() < good_enough:
                 self.current_judgement[edgename] = "pass_threshold"
                 results_dict["pass_threshold"] += 1
                 logging.info("PASS: Last fetch for %s is under the good_enough threshold "
                              "(%f < %f)", edgename, edge_state.last_value(), good_enough)
+                Monitor().set(edgename, "reachable_status", 1)
             elif edge_state.last_value() == const.FETCH_TIMEOUT:
                 # FETCH_TIMEOUT must be checked before the average measurements. An edge
                 # whose most recent fetch has failed should be marked as fail even if
@@ -120,23 +128,27 @@ class DecisionMaker(object):
                 logging.info(("FAIL: Fetch time for %s is equal to the FETCH_TIMEOUT of %d. "
                               "Automatic fail"),
                              edgename, const.FETCH_TIMEOUT)
+                Monitor().set(edgename, "reachable_status", 0)
             elif time_slice and time_slice_avg < good_enough:
                 self.current_judgement[edgename] = "pass_window"
                 results_dict["pass_window"] += 1
                 logging.info("UNSURE: Last fetch for %s is NOT under the good_enough threshold "
                              "but the average of the last %d items is (%f < %f)",
                              edgename, len(time_slice), time_slice_avg, good_enough)
+                Monitor().set(edgename, "reachable_status", 1)
             elif edge_state.current_average() < good_enough:
                 self.current_judgement[edgename] = "pass_average"
                 results_dict["pass_average"] += 1
                 logging.info("UNSURE: Last fetch for %s is NOT under the good_enough threshold "
                              "but under the average (%f < %f)",
                              edgename, edge_state.current_average(), good_enough)
+                Monitor().set(edgename, "reachable_status", 1)
             else:
                 self.current_judgement[edgename] = "pass"
                 results_dict["pass"] += 1
                 logging.info("PASS: Last fetch for %s is not under the good_enough threshold "
                              "but is passing (%f < %f)", edgename,
                              edge_state.last_value(), const.FETCH_TIMEOUT)
+                Monitor().set(edgename, "reachable_status", 1)
 
         return results_dict

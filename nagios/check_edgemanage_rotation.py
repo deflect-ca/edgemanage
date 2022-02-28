@@ -58,5 +58,5 @@ if __name__ == "__main__":
 
     c = CheckRotation(args.statefile[0])
     status, message = c.check_rotation(args.warn, args.crit)
-    print message
+    print(message)
     sys.exit(status)
