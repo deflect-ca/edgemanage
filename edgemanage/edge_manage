@@ -266,7 +266,7 @@ if __name__ == "__main__":
                               canary_site, canary_ip)
                 bad_canaries.append(canary_site)
         for bad_canary in bad_canaries:
-            del(canary_data[bad_canary])
+            del canary_data[bad_canary]
 
     lock_f = open(config["lockfile"], "w")
 

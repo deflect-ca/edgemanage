@@ -481,7 +481,7 @@ class EdgeManage(object):
                 if canary_edge:
                     self.state_obj.active_canaries[zone_name] = canary_edge
                 elif previous_canary:
-                    del(self.state_obj.active_canaries[zone_name])
+                    del self.state_obj.active_canaries[zone_name]
 
                 # Unless an update is forced:
                 # * Skip files that haven't been changed
@@ -490,8 +490,8 @@ class EdgeManage(object):
                 old_mtime = self.state_obj.zone_mtimes.get(zone_name)
                 if (not force_update and not edgelist_changed and not canary_changed and
                         old_mtime and old_mtime == self.current_mtimes[zone_name]):
-                    logging.debug("Not writing zonefile for %s because there are no changes pending",
-                                 zone_name)
+                    logging.debug("Not writing zonefile for %s "
+                                  "because there are no changes pending", zone_name)
                     continue
                 else:
                     any_changes = True
