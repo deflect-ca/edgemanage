@@ -190,14 +190,14 @@ class EdgeState(object):
             logging.debug("Rotating out item with timestamp %s and value %f due to "
                           "fetch cache being over %d items",
                           min_value, self.fetch_times[min_value], FETCH_HISTORY)
-            del(self.fetch_times[min_value])
+            del self.fetch_times[min_value]
 
         the_time_datetime = datetime.datetime.utcfromtimestamp(the_time)
         if the_time_datetime.minute == 0:
             # prune our values if there's too many of them
             if len(self.historical_average) > FETCH_HISTORY:
                 min_value = sorted(self.historical_average.keys())[0]
-                del(self.historical_average[min_value])
+                del self.historical_average[min_value]
             self.historical_average[str(the_time)] = self.current_average()
 
         self._dump()

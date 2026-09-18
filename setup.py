@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name = "edgemanage",
-    version = "3.1.0",
+    version = "3.2.0",
     author = "Donncha O Cearbhaill",
     author_email = "donncha@equalit.ie",
     description = "HTTP availability management tool",
@@ -20,7 +20,8 @@ setup(
         "requests",
         "ipaddr",
         "six",
-        "prometheus_client"
+        "prometheus_client",
+        "urllib3"
     ],
     classifiers=[
         "Development Status :: 5 - Production/Stable",
