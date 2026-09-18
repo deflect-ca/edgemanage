@@ -19,6 +19,12 @@ requests==2.31.0
 setproctitle==1.3.3
 six==1.12.0
 
+# Imported directly by edgetest.py, which calls disable_warnings() on
+# InsecureRequestWarning. It resolved before only because requests happens to
+# require it, so a change upstream in requests could have broken the import
+# with this lock still satisfied. Declared here so it stands on its own.
+urllib3==2.0.7
+
 # Not in the production freeze: pip omits setuptools from `pip freeze`, and a
 # virtualenv seeds it automatically, so the dependency has always been
 # implicit. It is real -- edge_manage imports pkg_resources at startup for
