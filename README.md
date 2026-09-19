@@ -70,6 +70,23 @@ The dry run mode will only read the statefile and log/print the
 decisions that would be made (use of the verbose switch is
 recommended).
 
+At the default log level, edgemanage logs one line per edge fetch, a
+summary of edge health, any edge that failed or was borderline, the
+edge selection decisions, and a line naming the A records now being
+served whenever the live edge set changes. Per-edge health verdicts,
+DNS resolution and zone file writes are logged at debug level.
+
+Because verbose mode logs to stderr *instead of* to `logpath`, it is no
+help for debugging a cron-driven run. Set the `log_level` config key
+(`DEBUG`, `INFO`, `WARNING`, `ERROR`; defaults to `INFO`) to change how
+much reaches the logfile.
+
+Commands configured under `commands` are spawned without being waited
+on, but at the end of a run edgemanage spends up to
+`command_reap_timeout` seconds (default 2) collecting those that have
+finished, so that a failing hook - a `rndc reload` that can't reach
+named, say - is logged at error level along with its output.
+
 Configuration
 --------
 

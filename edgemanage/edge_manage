@@ -19,7 +19,6 @@ import logging
 import logging.handlers
 import os
 import pprint
-import subprocess
 import sys
 import time
 import yaml
@@ -75,31 +74,29 @@ def daemon_setup():
     # file(self.pidfile,'w+').write("%s\n" % pid)
 
 
-def run_command_list(commands):
-    if not commands:
-        return None
+def log_rotation(dnet, edgelist_obj, last_live, zone_count):
+    """
+    Log the fact that the set of live edges has changed, along with the
+    A records that are now being served for this dnet. This is the only
+    record at info level that DNS has been altered.
+    """
 
-    for command in commands:
-        # Subprocess wants a list. This will complicate things for
-        # people using complex strings but for now that's too bad.
-        command = command.split(" ")
-        try:
-            subprocess.Popen(command)
-        except OSError as e:
-            logging.error("Failed to run command %s: %s", command, str(e))
-        except Exception as e:
-            # ~* I want to be the very best, like no one ever was *~
-            # I'll allow this kind of exception handling here
-            # because an unforeseen condition here shouldn't break
-            # execution.
-            logging.error(
-                "Caught unhandled exception when running command %s: %s",
-                command, str(e)
-            )
-        else:
-            logging.info("Started execution of command without issue: %s", command)
+    live_edges = edgelist_obj.get_live_edges()
 
-    return None
+    logging.info("Rotation for %s: dropped %s, added %s", dnet,
+                 sorted(set(last_live) - set(live_edges)),
+                 sorted(set(live_edges) - set(last_live)))
+
+    # Zone generation will have resolved and cached these already. It
+    # won't have run at all if we failed to establish a full edge list,
+    # in which case resolve_edges fills the cache here.
+    edgelist_obj.resolve_edges(live_edges)
+    a_records = ", ".join(["%s (%s)" % (edge, edgelist_obj.resolved_ips[edge])
+                           for edge in live_edges
+                           if edge in edgelist_obj.resolved_ips])
+
+    logging.info("%s now serving A records: %s across %d zones",
+                 dnet, a_records, zone_count)
 
 
 def main(dnet, dry_run, config, state_obj,
@@ -135,10 +132,16 @@ def main(dnet, dry_run, config, state_obj,
         edgemanage_object.add_edge_state(canary_ip, config["healthdata_store"],
                                          nowrite=dry_run)
 
+    # Commands are spawned but never waited on. Handles are collected
+    # here so that their output and exit status can be logged at the end
+    # of the run.
+    pending_commands = []
+
     # Run any run_before commands
     if "commands" in config and "run_before" in config["commands"]:
         if config["commands"]["run_before"]:
-            run_command_list(config["commands"]["run_before"])
+            pending_commands += util.run_command_list(
+                config["commands"]["run_before"], "run_before")
 
     verification_failues = edgemanage_object.do_edge_tests()
     state_obj.verification_failures = verification_failues
@@ -147,6 +150,8 @@ def main(dnet, dry_run, config, state_obj,
 
     if edgemanage_object.edgelist_obj.get_live_edges() != state_obj.last_live:
         # There has been a rotation as our old list doesn't equal the new
+        log_rotation(dnet, edgemanage_object.edgelist_obj, state_obj.last_live,
+                     len(edgemanage_object.current_mtimes))
         state_obj.add_rotation(const.STATE_HISTORICAL_ROTATIONS)
     state_obj.last_live = edgemanage_object.edgelist_obj.get_live_edges()
 
@@ -162,15 +167,22 @@ def main(dnet, dry_run, config, state_obj,
 
     if "commands" in config:
         run_after_section = config["commands"].get("run_after", [])
-        run_command_list(run_after_section)
+        pending_commands += util.run_command_list(run_after_section, "run_after")
 
         if any_changes:
             run_after_changes_section = config["commands"].get("run_after_changes", [])
-            run_command_list(run_after_changes_section)
+            pending_commands += util.run_command_list(run_after_changes_section,
+                                                      "run_after_changes")
 
     metric_path = os.path.join(
         config.get('prometheus_logs', '/var/log/prom/'), 'edgemanage.prom')
     monitor.write_metrics(metric_path)
+
+    # Last thing in the run, so that commands get as long as possible to
+    # finish before we give up on collecting their output.
+    util.reap_command_list(
+        pending_commands,
+        config.get("command_reap_timeout", util.COMMAND_REAP_TIMEOUT))
 
 
 if __name__ == "__main__":
@@ -215,18 +227,12 @@ if __name__ == "__main__":
         with open(statefile_path) as statefile_f:
             state = StateFile(json.loads(statefile_f.read()))
 
-    time_now = time.time()
-    if state.last_run and not args.dryrun and \
-       int(state.last_run) + 30 > int(time_now) and not args.force:
-        logging.error(("Can't run - last run was %d, current time is %d. Bypass"
-                       " this check at your own risk with --force"),
-                      state.last_run, time_now)
-        sys.exit(1)
-
     # Tag every line with the dnet this run operates on. The filter lives
     # on the handler so that records propagated from library loggers get
     # the attribute too - a missing %(dnet)s blows up the formatter.
     dnet_filter = util.DnetLogFilter(args.dnet)
+
+    bad_log_level = None
 
     if args.verbose:
         logger = logging.getLogger()
@@ -240,15 +246,36 @@ if __name__ == "__main__":
         logger.addHandler(handler)
 
     else:
-        # Set up logging
+        # Set up logging. Verbosity is configurable here rather than
+        # only via --verbose because --verbose logs to stderr instead of
+        # to logpath, so it's no use for debugging in production.
+        log_level_name = str(config.get("log_level", "INFO")).upper()
+        log_level = getattr(logging, log_level_name, None)
+        if not isinstance(log_level, int):
+            bad_log_level = log_level_name
+            log_level = logging.INFO
+
         logger = logging.getLogger()
-        logger.setLevel(logging.INFO)
+        logger.setLevel(log_level)
         logfile_handler = logging.handlers.WatchedFileHandler(config["logpath"])
         logfile_handler.setFormatter(logging.Formatter('%(asctime)s (%(process)d): '
                                                        '[%(dnet)s] %(levelname)s %(message)s'))
         logfile_handler.addFilter(dnet_filter)
         # TODO setup logging for error level in another file
         logger.addHandler(logfile_handler)
+
+    if bad_log_level:
+        logging.error("Unknown log_level %s in config, using INFO", bad_log_level)
+
+    # Checked after logging is set up so that the most common reason for
+    # a run doing nothing is visible in the logfile.
+    time_now = time.time()
+    if state.last_run and not args.dryrun and \
+       int(state.last_run) + 30 > int(time_now) and not args.force:
+        logging.error(("Can't run - last run was %d, current time is %d. Bypass"
+                       " this check at your own risk with --force"),
+                      state.last_run, time_now)
+        sys.exit(1)
 
     logging.debug("Command line options are %s", str(args))
     logging.debug("Full configuration is:\n %s", pprint.pformat(config))

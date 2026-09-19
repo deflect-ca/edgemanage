@@ -19,12 +19,15 @@ class DecisionMaker(object):
     provide judgement after some `add_edge_state()` call
     """
 
-    def __init__(self):
+    def __init__(self, label="edges"):
         self.edge_states = {}
         # A results dict with edge as key, string as value, one of
         # VALID_HEALTHS
         self.current_judgement = {}
         self.edges_disabled = False
+        # What this set of hosts is called in the health summary log
+        # line - a run judges edges and canaries separately.
+        self.label = label
 
     def add_edge_state(self, edge_state):
         """
@@ -66,7 +69,7 @@ class DecisionMaker(object):
 
         return sliced
 
-    def check_threshold(self, good_enough):
+    def check_threshold(self, good_enough, log_summary=True):
         """
         Check fetch response times for being under the given
         threshold.
@@ -79,6 +82,9 @@ class DecisionMaker(object):
         - edge_state.current_average() < good_enough
         - else
 
+        log_summary should be False when this is called to poll state
+        mid-run rather than to judge it - the canary kill check calls it
+        once per completed fetch, and one summary per run is enough.
         """
 
         # dict for stats to return
@@ -116,8 +122,8 @@ class DecisionMaker(object):
             if edge_state.last_value() < good_enough:
                 self.current_judgement[edgename] = "pass_threshold"
                 results_dict["pass_threshold"] += 1
-                logging.info("PASS: Last fetch for %s is under the good_enough threshold "
-                             "(%f < %f)", edgename, edge_state.last_value(), good_enough)
+                logging.debug("PASS: Last fetch for %s is under the good_enough threshold "
+                              "(%f < %f)", edgename, edge_state.last_value(), good_enough)
                 Monitor().set(edgename, "reachable_status", 1)
             elif edge_state.last_value() == const.FETCH_TIMEOUT:
                 # FETCH_TIMEOUT must be checked before the average measurements. An edge
@@ -146,9 +152,30 @@ class DecisionMaker(object):
             else:
                 self.current_judgement[edgename] = "pass"
                 results_dict["pass"] += 1
-                logging.info("PASS: Last fetch for %s is not under the good_enough threshold "
-                             "but is passing (%f < %f)", edgename,
-                             edge_state.last_value(), const.FETCH_TIMEOUT)
+                logging.debug("PASS: Last fetch for %s is not under the good_enough threshold "
+                              "but is passing (%f < %f)", edgename,
+                              edge_state.last_value(), const.FETCH_TIMEOUT)
                 Monitor().set(edgename, "reachable_status", 1)
 
+        if log_summary:
+            self.log_health_summary(results_dict)
+
         return results_dict
+
+    def log_health_summary(self, results_dict):
+        """
+        Log a one line summary of how many hosts landed in each health
+        state. Passing hosts are only logged individually at debug level,
+        so this is the sole record of them at info level.
+        """
+
+        if not self.edge_states:
+            return
+
+        # Keep VALID_HEALTHS order - best first - and skip empty states
+        # so that the common case is a short line.
+        summary = ", ".join(["%d %s" % (results_dict[statusname], statusname)
+                             for statusname in const.VALID_HEALTHS
+                             if results_dict.get(statusname)])
+
+        logging.info("Health of %d %s: %s", len(self.edge_states), self.label, summary)

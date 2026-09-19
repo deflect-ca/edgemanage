@@ -79,6 +79,9 @@ statefile: /var/lib/edgemanage/{dnet}.state
 # The file that edgemanage should log to. The harness runs with -v, which logs
 # to stderr instead, but the path still has to be writable.
 logpath: /var/log/edgemanage/edgemanage.log
+# How much to log: DEBUG, INFO, WARNING or ERROR. Only applies to logpath -
+# --verbose forces DEBUG to stderr regardless.
+log_level: INFO
 # A simple lockfile to prevent concurrent execution
 lockfile: /var/lock/edgemanage/edgemanage.lock
 

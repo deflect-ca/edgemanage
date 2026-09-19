@@ -72,6 +72,12 @@ statefile: /var/lib/edgemanage/{dnet}.state
 
 # The file that edgemanage should log to
 logpath: /var/log/edgemanage.log
+# How much to log. One of DEBUG, INFO, WARNING, ERROR. INFO reports
+# fetch times, health exceptions, edge selection decisions, rotations
+# and command results; DEBUG adds per-edge health verdicts, DNS
+# resolution and zone file writes. Note that --verbose is not the same
+# thing - it forces DEBUG but logs to stderr instead of to this file.
+log_level: INFO
 # A simple lockfile to prevent concurrent execution
 lockfile: /var/lock/edgemanage.lock
 
@@ -110,10 +116,20 @@ prometheus_logs: /var/log/prom/
 # file being written out. A good example of a run_after_changes is
 # reloading your named, but in theory this could be anything!
 # Edgemanage doesn't wait for the process to return, so whatever this
-# screws up is all on you.
+# screws up is all on you. At the end of the run it does spend up to
+# command_reap_timeout seconds collecting whatever has finished, so that
+# exit codes and output get logged - a non-zero exit is logged at ERROR
+# along with the command's stderr. Anything still running at that point
+# is left alone and its output is lost. Output is piped, so a command
+# that writes more than a pipe buffer's worth (~64KB) before being
+# reaped will block until it is.
 commands:
   run_after_changes:
     - /usr/sbin/rndc reload
   run_after:
     - some_command
   run_before:
+
+# Seconds to spend at the end of a run waiting for the commands above to
+# finish so their output can be logged. Defaults to 2.
+command_reap_timeout: 2

@@ -32,6 +32,9 @@ class EdgeList(object):
         # A dictionary indicating whether an edge is live or not, and
         # what state it's in
         self.edges = {}
+        # Edge name to IP address, populated as zones are generated. An
+        # EdgeList is built fresh every run, so this is a per-run cache.
+        self.resolved_ips = {}
 
     def add_edge(self, edgename, state=None, live=False):
         self.edges[edgename] = {
@@ -85,6 +88,39 @@ class EdgeList(object):
         if state:
             return selected_edges[0]
 
+    def resolve_edges(self, edge_list):
+        """
+        Resolve a list of edge names to IP addresses, retrying once on
+        failure. Edges that can't be resolved are logged and dropped.
+
+        Results are cached for the lifetime of this object so that the
+        same edge isn't looked up once per zone.
+        """
+
+        edge_ips = []
+        for edge in edge_list:
+
+            if edge in self.resolved_ips:
+                edge_ips.append(self.resolved_ips[edge])
+                continue
+
+            try:
+                edge_ip = socket.gethostbyname(edge)
+            except socket.gaierror:
+                try:
+                    # Retry resolution failures
+                    edge_ip = socket.gethostbyname(edge)
+                except socket.gaierror:
+                    logging.error(("Failed to resolve IP address for %s! Correct"
+                                   " hostname or remove this IP address from rotation."),
+                                  edge)
+                    continue
+
+            self.resolved_ips[edge] = edge_ip
+            edge_ips.append(edge_ip)
+
+        return edge_ips
+
     def generate_zone(self, domain, zonefile_dir, dns_config,
                       serial_number=None, canary_edge=None):
         logging.debug("Started generating zone for %s", domain)
@@ -107,25 +143,10 @@ class EdgeList(object):
             del edge_list_to_write[removed_edge]
             edge_list_to_write.append(canary_edge)
 
-        # TODO: cache looked up IP addresses, don't do this every time
-        live_edge_ips = []
-        for live_edge in edge_list_to_write:
-            try:
-                edge_ip = socket.gethostbyname(live_edge)
-                live_edge_ips.append(edge_ip)
-            except socket.gaierror:
-                try:
-                    # Retry resolution failures
-                    edge_ip = socket.gethostbyname(live_edge)
-                    live_edge_ips.append(edge_ip)
-                except socket.gaierror:
-                    logging.error(("Failed to resolve IP address for %s! Correct"
-                                   " hostname or remove this IP address from rotation."),
-                                  live_edge)
-                    continue
+        live_edge_ips = self.resolve_edges(edge_list_to_write)
 
         logging.debug("Writing zone file for %s, live edge list is %s",
-                      domain, self.get_live_edges())
+                      domain, edge_list_to_write)
 
         with open(os.path.join(zonefile_dir, "%s.zone" % domain)) as zonefile_f:
             zonefile = zonefile_f.read()
