@@ -72,7 +72,7 @@ class EdgeManage(object):
         with open(self.config["testobject"]["local"], 'rb') as test_local_f:
             testobject_hash = hashlib.md5(test_local_f.read()).hexdigest()
             logging.debug("Hash of local object %s is %s",
-                         self.config["testobject"]["local"], testobject_hash)
+                          self.config["testobject"]["local"], testobject_hash)
 
         return testobject_hash
 

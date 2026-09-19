@@ -14,6 +14,7 @@ from edgemanage import const, EdgeManage, StateFile, util
 from edgemanage.monitor import Monitor
 
 import argparse
+import importlib.metadata
 import json
 import logging
 import logging.handlers
@@ -22,7 +23,6 @@ import pprint
 import sys
 import time
 import yaml
-import pkg_resources
 
 import ipaddr
 import setproctitle
@@ -207,7 +207,7 @@ if __name__ == "__main__":
     parser.add_argument("--verbose", "-v", dest="verbose", action="store_true",
                         help="Verbose output", default=False)
 
-    version = pkg_resources.require("edgemanage")[0].version
+    version = importlib.metadata.version("edgemanage")
     parser.add_argument("--version", action="version",
                         version='%(prog)s {version}'.format(version=version))
 

@@ -6,10 +6,9 @@
 #
 # Base is python:3.9 rather than debian:buster-slim because buster is EOL (its
 # apt repos are archived) and because requirements.txt pins setproctitle==1.1.10
-# and ipaddr==2.2.0, which have no wheels for modern interpreters. 3.9 also still
-# ships pkg_resources (setuptools < 81), which edge_manage imports at startup for
-# --version. Bookworm rather than bullseye: the bullseye index on deb.debian.org
-# currently 404s on superseded package versions.
+# and ipaddr==2.2.0, which have no wheels for modern interpreters. Bookworm rather
+# than bullseye: the bullseye index on deb.debian.org currently 404s on superseded
+# package versions.
 FROM python:3.9-slim-bookworm
 
 # bind9-utils provides rndc, bind9-dnsutils provides dig for poking at the bind

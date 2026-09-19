@@ -229,8 +229,8 @@ The image does `pip install -e /src`, and compose bind-mounts `./edgemanage` ove
 [templates/zonetemplate.j2](../edgemanage/templates/zonetemplate.j2) — take effect on the next loop
 iteration with no rebuild.
 
-The three console scripts (`edge_manage`, `edge_query`, `edge_conf`) are an exception: setuptools
-*copies* them into `/usr/local/bin` at install time. To test an edit to one of those without
+The three console scripts (`edge_manage`, `edge_query`, `edge_conf`) are an exception: the PEP 660
+editable install *copies* them into `/usr/local/bin`. To test an edit to one of those without
 rebuilding, run it out of the mount:
 
 ```bash
@@ -286,8 +286,7 @@ Raising `workers` is the quickest way to observe that; leave it at 1 for results
 - Base is `python:3.9-slim-bookworm`, not `debian:buster-slim`. Buster is EOL and its apt repos are
   archived, and `requirements.txt` pins `ipaddr==2.2.0`, which has no wheel for modern
   interpreters. The image installs via `setup.py`'s unpinned `install_requires` instead, unlike the
-  test image, which installs the hash-checked locks. `edge_manage` imports `pkg_resources` at
-  startup, so it needs the `setuptools<81` pin the locks now carry.
+  test image, which installs the hash-checked locks.
 - edgemanage is installed from the local checkout, not `pip install git+https://...`.
 - A shell loop replaces cron, so logs go to stdout.
 - `testing: true` is **not** set. Every edge is its own container, so the real `Host: test.local`

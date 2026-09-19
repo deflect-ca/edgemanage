@@ -1,0 +1,11 @@
+# Declaring a build backend is what keeps `pip install -e .` on the PEP 660
+# path. Without this file pip falls back to legacy `setup.py develop`, which
+# replaces each entry in setup.py's `scripts` with an easy-install shim whose
+# first act is `__import__('pkg_resources').require(...)` -- a DeprecationWarning
+# on every single run. PEP 660 copies the scripts verbatim instead.
+#
+# Package metadata deliberately stays in setup.py; this file only pins the
+# backend.
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
