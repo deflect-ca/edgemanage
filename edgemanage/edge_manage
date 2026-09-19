@@ -267,6 +267,8 @@ if __name__ == "__main__":
     if bad_log_level:
         logging.error("Unknown log_level %s in config, using INFO", bad_log_level)
 
+    logging.info(">>> Edgemanage %s starting run on dnet %s", version, args.dnet)
+
     # Checked after logging is set up so that the most common reason for
     # a run doing nothing is visible in the logfile.
     time_now = time.time()
