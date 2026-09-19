@@ -1,8 +1,8 @@
 # Local Docker test harness
 
-A self-contained `docker compose` stack for exercising edgemanage end to end on a laptop: eight
+A self-contained `docker compose` stack for exercising edgemanage end to end on a laptop: ten
 fake origins standing in for edges and canaries, a bind9 instance serving the zones edgemanage
-generates, and an edgemanage container built from **your working tree**.
+generates, and an edgemanage container built from **your working tree**, running two dnets.
 
 This is a development harness, not a deployment artifact. The production image lives elsewhere.
 
@@ -19,6 +19,7 @@ Then watch the result in DNS:
 ```bash
 dig @127.0.0.1 -p 5354 test.local +short +tcp
 dig @127.0.0.1 -p 5354 www.test.local +short +tcp
+dig @127.0.0.1 -p 5354 dnet2.local +short +tcp
 ```
 
 `+tcp` is there for Docker Desktop on macOS, whose published-UDP path does not return DNS replies
@@ -40,7 +41,7 @@ that isn't one.
 
 | Service | IP | Behaviour | Expected health |
 |---|---|---|---|
-| `edgemanage` | .5 | runs `edge_manage -A dnet1 -v` every 60s | — |
+| `edgemanage` | .5 | runs `edge_manage -A <dnet> -v` for each of `dnet1`, `dnet2` every 60s | — |
 | `bind` | .6 | serves `named_dir`, published on host port 5354 | — |
 | `edge1` | .11 | responds in 0.02s | `pass_threshold` |
 | `edge2` | .12 | responds in 0.05s | `pass_threshold` |
@@ -50,9 +51,104 @@ that isn't one.
 | `edge6` | .16 | returns HTTP 500 | `fail` (`FetchFailed`) |
 | `canary1` | .101 | responds in 1.5s | `pass` — displaces one edge in `test.local` |
 | `canary2` | .102 | serves the wrong bytes | `fail` (`VerifyFailed`), never used |
+| `dnet2-edge1` | .21 | responds in 0.02s | `pass_threshold` — the only live edge in dnet2 |
+| `dnet2-edge2` | .22 | returns HTTP 500 | `fail` (`FetchFailed`) |
 
-`edge_count` is 4, so four of the six edges go live and the selection tiers in `make_edges_live()`
-actually have work to do.
+`edge_count` is 4 for dnet1, so four of its six edges go live and the selection tiers in
+`make_edges_live()` actually have work to do. dnet2 is the opposite case — see below.
+
+## dnet2: the steady-state dnet
+
+dnet1 is built to rotate. dnet2 is built so it cannot, which is what you want when the thing you
+are checking is the *absence* of a zone rewrite.
+
+`dnet_edge_count` for dnet2 is 1, `dnet2-edge1` is always healthy and `dnet2-edge2` always fails,
+so there is exactly one possible live set. The first run picks `dnet2-edge1` and writes
+`dnet2.local.zone`; on every run after that `check_last_live()` finds the previous edge still in
+`pass_threshold`, fills the whole requirement from it, and nothing downstream has a reason to
+write:
+
+```bash
+docker compose logs -f edgemanage | grep dnet2
+```
+
+```
+INFO  Got list of previously in use edges that are in a passing state: ['dnet2-edge1']
+INFO  Old edge list is still healthy - not making any changes
+INFO  Successfully established 1 edges: ['dnet2-edge1']
+DEBUG Not writing zonefile for dnet2.local because there are no changes pending
+```
+
+No `Rotation for dnet2` line and no `rndc reload`, because `any_changes` is false. The SOA serial
+is `int(time.time())` at write time, so it is the cheapest proof that nothing was rewritten:
+
+```bash
+docker compose exec edgemanage stat -c '%y' /var/cache/bind/dnet2.local.zone
+docker compose exec edgemanage grep SOA /var/cache/bind/dnet2.local.zone
+```
+
+Watch those across several loops — both stay put.
+
+There is deliberately **no** `docker/conf/canaries/dnet2` file. A canary appearing or disappearing
+is one of the four things that force a rewrite, so leaving canaries out of this dnet reduces the
+triggers to the template mtime, which is static. To see the mtime trigger fire on its own, without
+any health change at all:
+
+```bash
+touch docker/conf/zones/dnet2/dnet2.local.zone
+```
+
+The next run logs `Writing zone file for dnet2.local` with a fresh serial while the live edge list
+is unchanged. Breaking the healthy edge is the other way out of the steady state - it is a plain
+origin with the same `MODE` knobs as every other:
+
+```bash
+cat > /tmp/break-dnet2.yml <<'EOF'
+services:
+  dnet2-edge1:
+    environment:
+      EDGE_NAME: dnet2-edge1
+      MODE: "500"
+EOF
+docker compose -f docker-compose.yml -f /tmp/break-dnet2.yml up -d dnet2-edge1
+docker compose up -d dnet2-edge1          # put it back
+```
+
+With `dnet2-edge2` failing too, no tier can be filled, so `make_edges_live()` falls back to
+re-adding the last live set rather than serving an empty A record set. That fallback is worth
+watching once, and dnet2 is the cleanest place to watch it.
+
+Note that dnet1 never shows you this path, even when no edge has changed health. `canary1`
+displaces a *random* live edge in `test.local` on every run, so dnet1's live list churns by design
+and its zones are rewritten every loop. Showing the no-op is the whole reason dnet2 has no canary.
+
+### One instance, several dnets
+
+Both dnets run in the single `edgemanage` container, one `edge_manage` invocation per dnet per
+iteration, because that is the production shape: a cron line per dnet on one host, sharing one
+config file, one `healthdata_store` and one lockfile.
+[edgemanage_loop.sh](edgemanage/edgemanage_loop.sh) reads `DNET` as a space-separated list:
+
+```yaml
+environment:
+  DNET: "dnet1 dnet2"
+```
+
+The invocations are sequential, not backgrounded: `lockfile` is per host rather than per dnet, so
+a second concurrent run would just die on `acquire_lock`. The 30s minimum gap between runs is
+per-dnet, though - it is read from that dnet's statefile - so adding dnets does not affect it.
+Every log line is tagged `[<dnet>]`, which is what makes `grep dnet2` above work.
+
+Sharing one instance also inherits a production wart worth knowing about: `Monitor` writes to
+`<prometheus_logs>/edgemanage.prom`, a fixed filename with no dnet in it, and each run rewrites the
+whole file from its own registry. The last dnet in the list therefore wins:
+
+```bash
+docker compose exec edgemanage grep response_time /var/log/prom/edgemanage.prom
+```
+
+shows only the `dnet2-*` edges, never `edge1`-`edge6`. That is not a harness artifact - the same
+thing happens on a production host running more than one dnet off the same config.
 
 ### Why the working canary is the slow one
 
@@ -111,6 +207,7 @@ changed, or `--force-update` was passed — so on a steady-state run you should 
 ```bash
 # Current view of every edge
 docker compose exec edgemanage edge_query -A dnet1 -f json
+docker compose exec edgemanage edge_query -A dnet2 -f json
 
 # One-off dry run, nothing written
 docker compose run --rm edgemanage edge_manage -A dnet1 -v -n

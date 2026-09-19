@@ -1,0 +1,12 @@
+# Edge list for the dnet2 network - the "steady state" scenario.
+#
+# dnet2 exists to show the no-op path: edge_count for this dnet is 1, one edge
+# is always healthy and the other always fails, so the live set is decided on
+# the first run and never changes again. Every subsequent run should log
+# "Not writing zonefile for dnet2.local because there are no changes pending".
+#
+# There is deliberately no canaries/dnet2 file: a canary coming or going is one
+# of the four things that force a zone rewrite, so leaving canaries out keeps
+# the only remaining trigger the template mtime, which is static.
+dnet2-edge1
+dnet2-edge2

@@ -1,0 +1,5 @@
+; Operator-supplied include file for dnet2.local. Its mtime is one of the zone
+; rewrite triggers (state_obj.zone_mtimes), so touching this file is the way to
+; make the steady-state dnet write a zone again.
+ns1             300     IN      A       172.28.0.6
+_harness        300     IN      TXT     "dnet2 - steady state, zone written once"

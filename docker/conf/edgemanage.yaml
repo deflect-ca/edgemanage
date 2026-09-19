@@ -78,7 +78,7 @@ statefile: /var/lib/edgemanage/{dnet}.state
 
 # The file that edgemanage should log to. The harness runs with -v, which logs
 # to stderr instead, but the path still has to be writable.
-logpath: /var/log/edgemanage/edgemanage.log
+logpath: /dev/stdout
 # How much to log: DEBUG, INFO, WARNING or ERROR. Only applies to logpath -
 # --verbose forces DEBUG to stderr regardless.
 log_level: INFO
@@ -95,6 +95,10 @@ edge_count: 4
 # Number of edges to keep as @ per-dnet
 dnet_edge_count:
   dnet1: 4
+  # dnet2 has one healthy edge and one permanently failing one, so a count of 1
+  # means check_last_live() fills the whole requirement from the previous run
+  # every time and make_edges_live() never has to rewrite the zone.
+  dnet2: 1
 
 # Directory to write completed, full DNS zone files to. Shared with the bind
 # container as a named volume.
