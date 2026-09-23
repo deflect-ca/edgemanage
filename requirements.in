@@ -25,10 +25,8 @@ six==1.12.0
 # with this lock still satisfied. Declared here so it stands on its own.
 urllib3==2.0.7
 
-# Not in the production freeze: pip omits setuptools from `pip freeze`, and a
-# virtualenv seeds it automatically, so the dependency has always been
-# implicit. It is real -- edge_manage imports pkg_resources at startup for
-# --version -- and without it a clean `pip install -r requirements.txt` yields
-# an edge_manage that cannot start. Capped below 81, where pkg_resources is
-# deprecated and subsequently removed (same cap the docker image relies on).
-setuptools<81
+# setuptools is deliberately absent. edge_manage used to import pkg_resources
+# for --version, which made it an undeclared runtime dependency and forced a
+# `setuptools<81` cap to stay ahead of pkg_resources' removal; it now uses
+# importlib.metadata from the stdlib. setuptools is still needed to *build*
+# the package, which pyproject.toml declares.

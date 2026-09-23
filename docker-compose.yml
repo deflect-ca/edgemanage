@@ -86,6 +86,35 @@ services:
       edgenet:
         ipv4_address: 172.28.0.16
 
+  # ---- dnet2 edges -------------------------------------------------------
+  # A second dnet whose live set can never change, used to watch the no-op
+  # path. dnet_edge_count for dnet2 is 1, dnet2-edge1 is always healthy and
+  # dnet2-edge2 always fails, so the first run picks dnet2-edge1 and writes
+  # dnet2.local.zone, and every run after that keeps it via check_last_live()
+  # and skips the write. There is no canaries/dnet2 file on purpose.
+
+  dnet2-edge1:
+    <<: *origin
+    container_name: em-dnet2-edge1
+    environment:
+      EDGE_NAME: dnet2-edge1
+      DELAY: "0.02"
+      MODE: ok
+    networks:
+      edgenet:
+        ipv4_address: 172.28.0.21
+
+  dnet2-edge2:
+    <<: *origin
+    container_name: em-dnet2-edge2
+    environment:
+      EDGE_NAME: dnet2-edge2
+      DELAY: "0"
+      MODE: "500"
+    networks:
+      edgenet:
+        ipv4_address: 172.28.0.22
+
   # ---- canaries ----------------------------------------------------------
   # Referenced by IP from docker/conf/canaries/dnet1. canary1 displaces one live
   # edge in test.local; canary2 fails verification and is therefore never
@@ -144,9 +173,13 @@ services:
     container_name: em-edgemanage
     restart: unless-stopped
     environment:
-      DNET: dnet1
+      # Space-separated list. Production runs one edge_manage per dnet off the
+      # same host and the same cron, so the loop does the same: one invocation
+      # per dnet, in order, per iteration.
+      DNET: "dnet1 dnet2"
       # edge_manage refuses to run within 30s of the previous run, so anything
-      # below 30 here also needs EXTRA_ARGS: "--force".
+      # below 30 here also needs EXTRA_ARGS: "--force". The check is per-dnet -
+      # it reads that dnet's statefile - so adding dnets does not change it.
       RUN_INTERVAL: "60"
       EXTRA_ARGS: ""
     volumes:
@@ -166,6 +199,8 @@ services:
       - edge4
       - edge5
       - edge6
+      - dnet2-edge1
+      - dnet2-edge2
       - canary1
       - canary2
     networks:

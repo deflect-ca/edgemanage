@@ -56,7 +56,7 @@ class EdgeManage(object):
         if self.canary_data:
             # Because we treat the behaviour of canaries differently
             # let's ringfence them here.
-            self.canary_decision = DecisionMaker()
+            self.canary_decision = DecisionMaker(label="canaries")
 
         self.edge_states = {}
 
@@ -71,8 +71,8 @@ class EdgeManage(object):
         """
         with open(self.config["testobject"]["local"], 'rb') as test_local_f:
             testobject_hash = hashlib.md5(test_local_f.read()).hexdigest()
-            logging.info("Hash of local object %s is %s",
-                         self.config["testobject"]["local"], testobject_hash)
+            logging.debug("Hash of local object %s is %s",
+                          self.config["testobject"]["local"], testobject_hash)
 
         return testobject_hash
 
@@ -138,7 +138,8 @@ class EdgeManage(object):
         result time will be set to the `FETCH_TIMEOUT` value. All finished
         canary tests will be failed in `DecisionMaker` when `edges_disabled` is True.
         """
-        canary_stats = self.canary_decision.check_threshold(self.config["goodenough"])
+        canary_stats = self.canary_decision.check_threshold(
+            self.config["goodenough"], log_summary=False)
 
         # Cancel all queued canary tests when too many canaries have failed.
         if canary_stats["fail"] >= self.config["canary_killer"]:
@@ -269,7 +270,7 @@ class EdgeManage(object):
                 still_healthy.append(oldlive_edge)
             elif oldlive_edge not in self.decision.current_judgement:
                 logging.warning(("Discarding previously live edge %s "
-                                 "because it is no longer being checked",),
+                                 "because it is no longer being checked"),
                                 oldlive_edge)
             else:
                 logging.debug(
@@ -447,11 +448,11 @@ class EdgeManage(object):
                         canary_health = "missing"
 
                     if canary_health == "pass" or canary_health == "pass_window":
-                        logging.info("Zone %s has a canary edge configured: %s",
-                                     zone_name, canary_ip)
+                        logging.debug("Zone %s has a canary edge configured: %s",
+                                      zone_name, canary_ip)
                         canary_edge = canary_ip
                     else:
-                        logging.info(
+                        logging.debug(
                             ("Zone %s has %s configued as a canary but it is "
                              "in state %s so it will not be used. "),
                             zone_name, canary_ip, canary_health)

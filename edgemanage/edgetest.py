@@ -69,7 +69,7 @@ class EdgeTest(object):
          make HTTP request via `requests`
         """
         edge_ip = socket.gethostbyname(self.edgename)
-        logging.info("Resolving %s to %s", self.edgename, edge_ip)
+        logging.debug("Resolving %s to %s", self.edgename, edge_ip)
 
         with OverrideDNS(fetch_host, edge_ip):
             request_url = six.moves.urllib.parse.urljoin(
@@ -124,7 +124,7 @@ class OverrideDNS(object):
     Context manager to temporaily override the resolution of DNS
     """
     def __init__(self, hostname, ip_address):
-        logging.info("Overriding DNS resolution for %s to %s", hostname, ip_address)
+        logging.debug("Overriding DNS resolution for %s to %s", hostname, ip_address)
         self.hostname = hostname
         self.ip_address = ip_address
 

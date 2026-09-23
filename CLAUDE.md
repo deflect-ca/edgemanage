@@ -34,8 +34,11 @@ uv pip compile test-requirements.in -o test-requirements.txt \
 ```
 
 Runtime versions are pinned to the production server's `pip freeze`, with transitive pins held in
-`constraints.txt`. `setuptools<81` is pinned deliberately: `edge_manage` imports `pkg_resources`
-at startup for `--version`, and setuptools 81 drops it. See INSTALL.md for the full workflow.
+`constraints.txt`. setuptools is *not* a runtime dependency: `edge_manage` reads its `--version`
+from `importlib.metadata`, not `pkg_resources`. [pyproject.toml](pyproject.toml) declares it as a
+build dependency only, and exists so that `pip install -e .` takes the PEP 660 path instead of
+legacy `setup.py develop`, which wraps each `scripts` entry in a `pkg_resources` shim that warns on
+every run. See INSTALL.md for the full workflow.
 
 Integration tests ([tests/test_edge_manage_integration.py](tests/test_edge_manage_integration.py))
 spawn a Flask server via pexpect and shell out to `edge_manage`, so they need the package
