@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 import os
 import glob
+import json
 import shutil
 import unittest
 import tempfile
@@ -108,6 +109,13 @@ class EdgeManageIntegration(unittest.TestCase):
         with open('%s/%s.state' % (self.edge_data_dir, DNET_NAME), 'r') as state_file:
             return yaml.load(state_file.read(), Loader=yaml.SafeLoader)
 
+    def write_state_file(self, state_data):
+        """
+        Overwrite the state file, to set up state for the next run
+        """
+        with open('%s/%s.state' % (self.edge_data_dir, DNET_NAME), 'w') as state_file:
+            json.dump(state_data, state_file)
+
     def spawn_web_server(self, config_file=None, test_object=None):
         """
         Spawn a Flask testing server and wait for it to be ready.
@@ -121,12 +129,14 @@ class EdgeManageIntegration(unittest.TestCase):
         self.web_process = pexpect.spawn(' '.join(test_server_command), cwd="tests/")
         self.web_process.expect("Test server running", timeout=5)
 
-    def run_edge_manage(self, config_path, debug=False):
+    def run_edge_manage(self, config_path, debug=False, extra_args=None):
         """
         Run the edge_manage tool and wait for it to finish
         """
         edge_manage_command = ['edge_manage', '-A', DNET_NAME,
                                '--config', config_path]
+        if extra_args:
+            edge_manage_command.extend(extra_args)
         if debug:
             edge_manage_command.append('--verbose')
 
@@ -237,6 +247,35 @@ class EdgeManageIntegration(unittest.TestCase):
         self.assertTrue(health_count["pass_threshold"], 4)
         self.assertTrue(health_count["pass"], 8)
         self.assertTrue(health_count["fail"], 8)
+
+    def test20EdgesTimedRotation(self):
+        """
+        Run edge_manage twice on a dnet with timed rotation. The first run
+        serves a single edge, and once the timer is due the second run moves
+        to a different one even though every edge is healthy.
+        """
+        self.spawn_web_server('test_server_configs/20-edge-20-canaries-all-fast.yaml')
+        custom_options = {'dnet_rotation_minutes': {DNET_NAME: 10}}
+        config_path = self.rewrite_default_config(options=custom_options,
+                                                  num_edges=20, num_canaries=20)
+
+        self.run_edge_manage(config_path)
+        state_data = self.load_state_file()
+        self.assertEqual(len(state_data['last_live']), 1)
+        first_edge = state_data['last_live'][0]
+        self.assertEqual(state_data['rotation_cycle'], [first_edge])
+
+        # Make the timer due by pretending the last rotation was an hour ago
+        state_data['rotation_list'] = [time.time() - 3600]
+        self.write_state_file(state_data)
+
+        # --force skips the 30s minimum gap between runs
+        self.run_edge_manage(config_path, extra_args=['--force'])
+        state_data = self.load_state_file()
+        self.assertEqual(len(state_data['last_live']), 1)
+        second_edge = state_data['last_live'][0]
+        self.assertNotEqual(second_edge, first_edge)
+        self.assertEqual(state_data['rotation_cycle'], [first_edge, second_edge])
 
     def tearDown(self):
         # Stop the Flask server
