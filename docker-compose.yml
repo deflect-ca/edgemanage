@@ -115,6 +115,45 @@ services:
       edgenet:
         ipv4_address: 172.28.0.22
 
+  # ---- dnet3 edges -------------------------------------------------------
+  # The timed rotation dnet. dnet_rotation_minutes for dnet3 is 2, so it serves
+  # one of these and moves to another every two minutes, even though all three
+  # are always healthy. Dedicated containers rather than reusing edge1-edge3,
+  # because healthdata_store is keyed by edge name and shared between dnets.
+
+  dnet3-edge1:
+    <<: *origin
+    container_name: em-dnet3-edge1
+    environment:
+      EDGE_NAME: dnet3-edge1
+      DELAY: "0.02"
+      MODE: ok
+    networks:
+      edgenet:
+        ipv4_address: 172.28.0.31
+
+  dnet3-edge2:
+    <<: *origin
+    container_name: em-dnet3-edge2
+    environment:
+      EDGE_NAME: dnet3-edge2
+      DELAY: "0.05"
+      MODE: ok
+    networks:
+      edgenet:
+        ipv4_address: 172.28.0.32
+
+  dnet3-edge3:
+    <<: *origin
+    container_name: em-dnet3-edge3
+    environment:
+      EDGE_NAME: dnet3-edge3
+      DELAY: "0.1"
+      MODE: ok
+    networks:
+      edgenet:
+        ipv4_address: 172.28.0.33
+
   # ---- canaries ----------------------------------------------------------
   # Referenced by IP from docker/conf/canaries/dnet1. canary1 displaces one live
   # edge in test.local; canary2 fails verification and is therefore never
@@ -176,7 +215,7 @@ services:
       # Space-separated list. Production runs one edge_manage per dnet off the
       # same host and the same cron, so the loop does the same: one invocation
       # per dnet, in order, per iteration.
-      DNET: "dnet1 dnet2"
+      DNET: "dnet1 dnet2 dnet3"
       # edge_manage refuses to run within 30s of the previous run, so anything
       # below 30 here also needs EXTRA_ARGS: "--force". The check is per-dnet -
       # it reads that dnet's statefile - so adding dnets does not change it.
@@ -201,6 +240,9 @@ services:
       - edge6
       - dnet2-edge1
       - dnet2-edge2
+      - dnet3-edge1
+      - dnet3-edge2
+      - dnet3-edge3
       - canary1
       - canary2
     networks:

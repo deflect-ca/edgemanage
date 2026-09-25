@@ -1,0 +1,9 @@
+# Edge list for the dnet3 network - the timed rotation scenario.
+#
+# dnet3 is in dnet_rotation_minutes with a value of 2, so it serves one edge
+# and moves to a different one every two minutes even though all three are
+# always healthy. rotation_cycle in /var/lib/edgemanage/dnet3.state shows which
+# edges have had a turn in the current cycle.
+dnet3-edge1
+dnet3-edge2
+dnet3-edge3

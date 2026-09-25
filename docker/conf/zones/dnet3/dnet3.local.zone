@@ -1,0 +1,4 @@
+; Operator-supplied include file for dnet3.local. dnet3 has timed rotation, so
+; the single apex A record changes every couple of minutes.
+ns1             300     IN      A       172.28.0.6
+_harness        300     IN      TXT     "dnet3 - timed rotation, one edge, new IP every 2 minutes"
