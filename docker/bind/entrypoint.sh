@@ -8,7 +8,7 @@ set -eu
 
 ZONE_DIR=/var/cache/bind
 
-for zone in test.local example.local dnet2.local; do
+for zone in test.local example.local dnet2.local dnet3.local; do
     zonefile="${ZONE_DIR}/${zone}.zone"
     if [ ! -s "$zonefile" ]; then
         echo "entrypoint: seeding placeholder zone for ${zone}"

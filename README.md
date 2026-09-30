@@ -111,6 +111,52 @@ caches and so on.
 See the `edgemanage.yaml` file for documentation of the configuration
 options.
 
+Time-based rotation
+-------
+
+Some networks are better served by moving their IP around than by
+keeping it stable. A dnet listed in `dnet_rotation_minutes` gets timed
+rotation:
+
+```yaml
+dnet_rotation_minutes:
+  my_timed_dnet: 10
+```
+
+A timed dnet always serves exactly one edge, whatever `edge_count` and
+`dnet_edge_count` say. Every N minutes that edge is replaced even if it
+is healthy. The replacement comes from the best health tier available
+(`pass_threshold`, then `pass_window`, `pass_average`, `pass`), picked at
+random among the edges in that tier that haven't been live yet in the
+current cycle. The cycle is kept as `rotation_cycle` in the dnet's
+statefile. Once every edge in the tier has had a turn a new cycle
+starts, so with a healthy pool no edge repeats until all the others have
+been used.
+
+Health still applies between rotations. If the live edge starts
+failing, or another edge is in a strictly better tier, it is replaced
+straight away using the same pick rule. That counts as a rotation, so
+the new edge gets a full N minutes. A failing edge is never rotated in.
+If the timer is due but no other edge is passing, the current edge stays
+and the rotation is retried on the next run.
+
+Some things to be aware of:
+
+* The value must be a whole number of minutes, 1 or more. Anything else
+  is logged as an error and the dnet falls back to normal, health-based
+  selection.
+* Rotation happens on the first run after the timer is due, so it is
+  only as fine-grained as your cron. Resolvers may also keep the old IP
+  for the zone's TTL (300 seconds), so intervals under 5 minutes are of
+  limited use.
+* An edge in `force` (and passing) or `blindforce` mode suspends
+  rotation and is served instead. If several are forced, the first in
+  sorted order is used.
+* A canary in a timed dnet replaces the single rotating edge in its zone.
+* `nagios/check_edgemanage_rotation.py` warns at 4 and goes critical at 8
+  rotations per 10 minutes by default. For a timed dnet, raise `-w` and
+  `-c` above 10 / N, or don't run that check against it.
+
 Canaries
 -------
 

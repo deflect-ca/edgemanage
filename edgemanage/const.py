@@ -41,3 +41,13 @@ VALID_MODES = ["available", "force", "blindforce", "unavailable"]
 # decision being passed upon tests.
 VALID_HEALTHS = ["pass_threshold", "pass_window", "pass_average", "pass",
                  "fail"]
+
+# The passing subset of VALID_HEALTHS, best first. Timed rotation walks
+# these to find the healthiest edges to rotate onto.
+PASSING_HEALTHS = ["pass_threshold", "pass_window", "pass_average", "pass"]
+
+# Seconds of slack when deciding whether a timed rotation is due. The
+# rotation timestamp is taken at the end of a run but checked mid-run, so
+# without this a 10 minute rotation on a 60s cron would slip to 11
+# minutes. Matches the 30s minimum gap edge_manage enforces between runs.
+TIME_ROTATION_GRACE = 30

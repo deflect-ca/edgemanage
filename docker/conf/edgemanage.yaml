@@ -100,6 +100,12 @@ dnet_edge_count:
   # every time and make_edges_live() never has to rewrite the zone.
   dnet2: 1
 
+# Timed rotation, in whole minutes. dnet3 serves one edge and moves to a
+# different healthy one every 2 minutes, with no repeats until all three have
+# had a turn. See "dnet3: timed rotation" in docker/README.md.
+dnet_rotation_minutes:
+  dnet3: 2
+
 # Directory to write completed, full DNS zone files to. Shared with the bind
 # container as a named volume.
 named_dir: /var/cache/bind/

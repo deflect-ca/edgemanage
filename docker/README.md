@@ -2,7 +2,7 @@
 
 A self-contained `docker compose` stack for exercising edgemanage end to end on a laptop: ten
 fake origins standing in for edges and canaries, a bind9 instance serving the zones edgemanage
-generates, and an edgemanage container built from **your working tree**, running two dnets.
+generates, and an edgemanage container built from **your working tree**, running three dnets.
 
 This is a development harness, not a deployment artifact. The production image lives elsewhere.
 
@@ -20,6 +20,7 @@ Then watch the result in DNS:
 dig @127.0.0.1 -p 5354 test.local +short +tcp
 dig @127.0.0.1 -p 5354 www.test.local +short +tcp
 dig @127.0.0.1 -p 5354 dnet2.local +short +tcp
+dig @127.0.0.1 -p 5354 dnet3.local +short +tcp
 ```
 
 `+tcp` is there for Docker Desktop on macOS, whose published-UDP path does not return DNS replies
@@ -41,7 +42,7 @@ that isn't one.
 
 | Service | IP | Behaviour | Expected health |
 |---|---|---|---|
-| `edgemanage` | .5 | runs `edge_manage -A <dnet> -v` for each of `dnet1`, `dnet2` every 60s | — |
+| `edgemanage` | .5 | runs `edge_manage -A <dnet> -v` for each of `dnet1`, `dnet2`, `dnet3` every 60s | — |
 | `bind` | .6 | serves `named_dir`, published on host port 5354 | — |
 | `edge1` | .11 | responds in 0.02s | `pass_threshold` |
 | `edge2` | .12 | responds in 0.05s | `pass_threshold` |
@@ -53,6 +54,9 @@ that isn't one.
 | `canary2` | .102 | serves the wrong bytes | `fail` (`VerifyFailed`), never used |
 | `dnet2-edge1` | .21 | responds in 0.02s | `pass_threshold` — the only live edge in dnet2 |
 | `dnet2-edge2` | .22 | returns HTTP 500 | `fail` (`FetchFailed`) |
+| `dnet3-edge1` | .31 | responds in 0.02s | `pass_threshold` |
+| `dnet3-edge2` | .32 | responds in 0.05s | `pass_threshold` |
+| `dnet3-edge3` | .33 | responds in 0.1s | `pass_threshold` |
 
 `edge_count` is 4 for dnet1, so four of its six edges go live and the selection tiers in
 `make_edges_live()` actually have work to do. dnet2 is the opposite case — see below.
@@ -131,7 +135,7 @@ config file, one `healthdata_store` and one lockfile.
 
 ```yaml
 environment:
-  DNET: "dnet1 dnet2"
+  DNET: "dnet1 dnet2 dnet3"
 ```
 
 The invocations are sequential, not backgrounded: `lockfile` is per host rather than per dnet, so
@@ -161,6 +165,39 @@ pass_threshold so it will not be used" and silently skipped.
 A steady delay above `goodenough` (0.700) and below `const.FETCH_TIMEOUT` (10) is therefore what
 puts a canary into a tier that actually gets substituted. Worth knowing before you conclude your
 canaries are broken.
+
+## dnet3: timed rotation
+
+dnet3 is in `dnet_rotation_minutes` with a value of 2. It serves exactly one edge and moves to a
+different one every two minutes, even though all three of its edges are always healthy. The pick
+is random, but `rotation_cycle` in the statefile stops any edge repeating until the other two have
+had a turn. See "Time-based rotation" in the top-level README for the full rules.
+
+```bash
+docker compose logs -f edgemanage | grep dnet3
+```
+
+Every second loop you should see something like:
+
+```
+INFO Timed rotation: rotation due for dnet3-edge2, picked dnet3-edge3 (pass_threshold)
+INFO Rotation for dnet3: dropped ['dnet3-edge2'], added ['dnet3-edge3']
+```
+
+and on the loops in between, no `Timed rotation` line (the "not due for another Ns" line is at
+debug level). Once all three have been used you'll see `starting a new rotation cycle`. The single
+A record and the cycle follow along:
+
+```bash
+dig @127.0.0.1 -p 5354 dnet3.local +short +tcp
+docker compose exec edgemanage python3 -c \
+    "import json; s = json.load(open('/var/lib/edgemanage/dnet3.state')); \
+     print(s['last_live'], s['rotation_cycle'])"
+```
+
+Break the live edge with a `MODE: "500"` override, as for dnet2 above, and the next run fails over
+at once instead of waiting for the timer (`... is failing, picked ...`). That failover counts as
+a rotation, so the new edge gets a full two minutes.
 
 ## Changing how an edge behaves
 

@@ -26,6 +26,9 @@ class StateFile(object):
         self.zone_mtimes = {}
         # Canary IP addresses in use for given domain
         self.active_canaries = {}
+        # Edges used in the current timed rotation cycle, including the
+        # live one. Only used by dnets in dnet_rotation_minutes.
+        self.rotation_cycle = []
 
         # Restore any existing saved values - setting values above
         # this means that we can add new values to the state file

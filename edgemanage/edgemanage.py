@@ -17,6 +17,8 @@ import traceback
 import hashlib
 import logging
 import os
+import random
+import time
 import six
 
 
@@ -303,6 +305,160 @@ class EdgeManage(object):
             choosen_edges.append(edge)
         return choosen_edges
 
+    def time_rotation_interval(self):
+        """
+        Seconds between timed rotations for this dnet, or None if the dnet
+        isn't in `dnet_rotation_minutes` or its value is invalid.
+        """
+        rotation_minutes = self.config.get("dnet_rotation_minutes") or {}
+        if self.dnet not in rotation_minutes:
+            return None
+
+        minutes = rotation_minutes[self.dnet]
+        # bool is a subclass of int, so without the explicit check a
+        # `true` in the config would pass as 1 minute.
+        if isinstance(minutes, bool) or not isinstance(minutes, int) or minutes < 1:
+            logging.error("Invalid dnet_rotation_minutes value %r for %s: must be a whole "
+                          "number of minutes, 1 or more. Not using timed rotation",
+                          minutes, self.dnet)
+            return None
+
+        return minutes * 60
+
+    def health_rank(self, edgename):
+        """
+        Position of an edge's judgement in PASSING_HEALTHS, best first.
+        Failing and unjudged edges rank last.
+        """
+        judgement = self.decision.current_judgement.get(edgename)
+        if judgement in const.PASSING_HEALTHS:
+            return const.PASSING_HEALTHS.index(judgement)
+        return len(const.PASSING_HEALTHS)
+
+    def time_rotation_due(self, interval):
+        """
+        True if `interval` seconds, less the grace, have passed since the
+        live edge list last changed. A health failover changes the live
+        list too, so it restarts the timer.
+        """
+        last_rotation = self.state_obj.last_rotation()
+        if last_rotation is None:
+            return True
+
+        remaining = last_rotation + interval - const.TIME_ROTATION_GRACE - time.time()
+        if remaining > 0:
+            logging.debug("Timed rotation not due for another %ds", remaining)
+            return False
+        return True
+
+    def best_rotation_candidates(self, exclude):
+        """
+        The best health tier holding any judged edge not in `exclude`, and
+        the edges in it. Returns (None, []) if no other edge is passing.
+        """
+        candidates = [edge for edge in self.decision.current_judgement
+                      if edge not in exclude]
+        for tier in const.PASSING_HEALTHS:
+            edges_in_tier = sorted([edge for edge in candidates
+                                    if self.decision.get_judgement(edge) == tier])
+            if edges_in_tier:
+                return tier, edges_in_tier
+        return None, []
+
+    def choose_from_rotation_cycle(self, tier, edges):
+        """
+        Pick a random edge from `edges` that hasn't been live yet this
+        cycle. If they all have, start a new cycle from the live edge.
+        """
+        unused = [edge for edge in edges if edge not in self.state_obj.rotation_cycle]
+        if not unused:
+            logging.info("All %d other %s edges have been used this cycle, starting a new "
+                         "rotation cycle", len(edges), tier)
+            self.state_obj.rotation_cycle = sorted(self.state_obj.last_live)
+            unused = edges
+        return random.choice(unused)
+
+    def select_time_rotation_edge(self, interval):
+        """
+        Choose the single live edge for a dnet in `dnet_rotation_minutes`.
+
+        The live edge is replaced when the timer is due, when it is failing,
+        or when another edge is in a strictly better health tier. The
+        replacement is picked at random from the best tier available,
+        skipping edges already used this cycle. Edges in force or
+        blindforce mode suspend rotation.
+        """
+        canary_ips = list(self.canary_data.values())
+        forced_edges = []
+        for edgename, edge_state in six.iteritems(self.edge_states):
+            if edgename in canary_ips:
+                continue
+            if edge_state.mode == "blindforce" or (
+                    edge_state.mode == "force" and
+                    self.health_rank(edgename) < len(const.PASSING_HEALTHS)):
+                forced_edges.append(edgename)
+
+        if forced_edges:
+            forced_edges.sort()
+            if len(forced_edges) > 1:
+                logging.warning("Timed rotation serves one edge but %d are forced (%s), "
+                                "using %s", len(forced_edges), forced_edges, forced_edges[0])
+            logging.info("Timed rotation suspended: %s is in mode %s",
+                         forced_edges[0], self.edge_states[forced_edges[0]].mode)
+            self.edgelist_obj.add_edge(forced_edges[0], state="pass", live=True)
+            return
+
+        last_live = sorted(self.state_obj.last_live)
+
+        # Normally one edge. Several only on the first run after a dnet
+        # switches to timed rotation, when we keep the healthiest.
+        judged_last_live = [edge for edge in last_live
+                            if edge in self.decision.current_judgement]
+        current_edge = None
+        current_rank = len(const.PASSING_HEALTHS)
+        if judged_last_live:
+            current_edge = min(judged_last_live, key=self.health_rank)
+            current_rank = self.health_rank(current_edge)
+        current_passing = current_rank < len(const.PASSING_HEALTHS)
+
+        due = self.time_rotation_due(interval)
+        tier, candidates = self.best_rotation_candidates(last_live)
+
+        move = (due or not current_passing or
+                (tier is not None and const.PASSING_HEALTHS.index(tier) < current_rank))
+
+        if move and candidates:
+            if current_edge is None and last_live:
+                reason = "previous live edges %s are no longer being checked" % last_live
+            elif current_edge is None:
+                reason = "no previous live edge"
+            elif not current_passing:
+                reason = "%s is failing" % current_edge
+            elif due:
+                reason = "rotation due for %s" % current_edge
+            else:
+                reason = "%s is only %s" % (current_edge,
+                                            self.decision.get_judgement(current_edge))
+
+            next_edge = self.choose_from_rotation_cycle(tier, candidates)
+            logging.info("Timed rotation: %s, picked %s (%s)", reason, next_edge, tier)
+            self.edgelist_obj.add_edge(next_edge, state=tier, live=True)
+
+        elif current_passing:
+            if due:
+                logging.warning("Timed rotation is due but no other edge is passing, "
+                                "keeping %s", current_edge)
+            self.edgelist_obj.add_edge(current_edge,
+                                       state=self.decision.get_judgement(current_edge),
+                                       live=True)
+
+        elif last_live:
+            # Same last resort as the health-based path: a failing edge beats
+            # an empty A record set.
+            logging.error("No passing edges for timed rotation")
+            logging.error("Re-adding the last live edge, even though it is failing!")
+            self.edgelist_obj.add_edge(last_live[0], state="pass", live=True)
+
     def make_edges_live(self, force_update):
         '''
         Choose edges, write out zone files and state info.
@@ -318,6 +474,14 @@ class EdgeManage(object):
         if self.dnet in self.config["dnet_edge_count"]:
             required_edge_count = self.config["dnet_edge_count"][self.dnet]
 
+        # A dnet with timed rotation always serves exactly one edge
+        rotation_interval = self.time_rotation_interval()
+        if rotation_interval:
+            if required_edge_count != 1 and self.dnet in self.config["dnet_edge_count"]:
+                logging.warning("Ignoring dnet_edge_count of %d for %s: timed rotation "
+                                "always uses 1 edge", required_edge_count, self.dnet)
+            required_edge_count = 1
+
         # Has the edgelist changed since last iteration?
         edgelist_changed = None
         # Have ANY changes happened since last iteration? Including zone
@@ -330,92 +494,106 @@ class EdgeManage(object):
             canary_stats = self.canary_decision.check_threshold(good_enough)
             logging.debug("Stats of canary threshold check are %s", str(canary_stats))
 
-        # Get the list of edges that were 'in' (live) the last time and are
-        # still healthy (under the good_enough threshold)
-        still_healthy_from_last_run = self.check_last_live()
+        if rotation_interval:
+            logging.debug("Stats of threshold check are %s", str(threshold_stats))
+            self.select_time_rotation_edge(rotation_interval)
 
-        for edgename, edge_state in six.iteritems(self.edge_states):
-            if edgename not in list(self.canary_data.values()) and edge_state.mode == "force":
-                if self.decision.edge_is_passing(edgename):
-                    logging.debug(
-                        "Making host %s live because it is in mode force and it is in state pass",
-                        edgename)
+            # last_live is stored sorted, and this is the same comparison
+            # edge_manage uses to decide whether a rotation happened.
+            edgelist_changed = (self.edgelist_obj.get_live_edges() !=
+                                sorted(self.state_obj.last_live))
 
-                    # Don't set edgelist_changed to True if we're
-                    # already healthy and live
-                    if edgename not in still_healthy_from_last_run:
-                        self.edgelist_obj.add_edge(edgename, state="pass", live=True)
+            for live_edge in self.edgelist_obj.get_live_edges():
+                if live_edge not in self.state_obj.rotation_cycle:
+                    self.state_obj.rotation_cycle.append(live_edge)
+
+        else:
+            # Get the list of edges that were 'in' (live) the last time and are
+            # still healthy (under the good_enough threshold)
+            still_healthy_from_last_run = self.check_last_live()
+
+            for edgename, edge_state in six.iteritems(self.edge_states):
+                if edgename not in list(self.canary_data.values()) and edge_state.mode == "force":
+                    if self.decision.edge_is_passing(edgename):
+                        logging.debug(
+                            "Making host %s live because it is in mode force and it is in "
+                            "state pass", edgename)
+
+                        # Don't set edgelist_changed to True if we're
+                        # already healthy and live
+                        if edgename not in still_healthy_from_last_run:
+                            self.edgelist_obj.add_edge(edgename, state="pass", live=True)
+                            edgelist_changed = True
+
+                elif edgename not in list(self.canary_data.values()) and edge_state.mode == "blindforce":  # noqa: E501
+                    logging.debug("Making host %s live because it is in mode blindforce.",
+                                  edgename)
+                    self.edgelist_obj.add_edge(edgename, state="pass", live=True)
+
+                    # Don't update the edgelist if we're still in the last
+                    # live list. We don't care if we're healthy.
+                    if edgename not in self.state_obj.last_live:
                         edgelist_changed = True
 
-            elif edgename not in list(self.canary_data.values()) and edge_state.mode == "blindforce":  # noqa: E501
-                logging.debug("Making host %s live because it is in mode blindforce.",
-                              edgename)
-                self.edgelist_obj.add_edge(edgename, state="pass", live=True)
+            logging.debug("Stats of threshold check are %s", str(threshold_stats))
 
-                # Don't update the edgelist if we're still in the last
-                # live list. We don't care if we're healthy.
-                if edgename not in self.state_obj.last_live:
-                    edgelist_changed = True
+            # If everything is still healthy from the last run then use those.
+            if still_healthy_from_last_run:
+                logging.info("Got list of previously in use edges that are in a passing state: %s",
+                             still_healthy_from_last_run)
+                if edgelist_changed is None:
+                    # This check is to ensure that a previously-passing
+                    # list doesn't ignore forced or blindforced edges.
+                    edgelist_changed = False
 
-        logging.debug("Stats of threshold check are %s", str(threshold_stats))
+            for still_healthy in still_healthy_from_last_run:
+                if len(self.edgelist_obj) < required_edge_count:
+                    self.edgelist_obj.add_edge(still_healthy, state="pass", live=True)
 
-        # If everything is still healthy from the last run then use those.
-        if still_healthy_from_last_run:
-            logging.info("Got list of previously in use edges that are in a passing state: %s",
-                         still_healthy_from_last_run)
-            if edgelist_changed is None:
-                # This check is to ensure that a previously-passing
-                # list doesn't ignore forced or blindforced edges.
-                edgelist_changed = False
-
-        for still_healthy in still_healthy_from_last_run:
-            if len(self.edgelist_obj) < required_edge_count:
-                self.edgelist_obj.add_edge(still_healthy, state="pass", live=True)
-
-        if len(still_healthy_from_last_run) == required_edge_count:
-            logging.info(
-                "Old edge list is still healthy - not making any changes"
-            )
-        else:
-            logging.debug(("Didn't have enough healthy edges from last run to meet "
-                           "edge count - trying to add more edges"))
-            edgelist_changed = True
-
-            # This loops over the non-canary edges
-            remaining_edges = []
-            for decision_edge, edge_state in six.iteritems(self.decision.current_judgement):
-                if decision_edge not in self.edgelist_obj.edges:
-                    remaining_edges.append(decision_edge)
-
-            logging.debug("List of previously passing edges is currently %s",
-                          self.edgelist_obj.get_live_edges())
-
-            # Attempt to meet demand starting with the most responsive edge states
-            for desired_state in ["pass_threshold", "pass_window", "pass_average", "pass"]:
-                needed_edges = required_edge_count - self.edgelist_obj.get_live_count()
-                filled_by_current_state = self.get_fastest_edges_by_state(remaining_edges,
-                                                                          desired_state,
-                                                                          needed_edges)
-                for edge in filled_by_current_state:
-                    self.edgelist_obj.add_edge(edge, state=desired_state, live=True)
-
-                if self.edgelist_obj.get_live_count() == required_edge_count:
-                    logging.info("Filled requirement for %d edges with edges in state %s",
-                                 required_edge_count, desired_state)
-                    break
+            if len(still_healthy_from_last_run) == required_edge_count:
+                logging.info(
+                    "Old edge list is still healthy - not making any changes"
+                )
             else:
-                # Entering an "else" in the context of a "for" loop means
-                # "we didn't break". It's horrible but it's exactly what
-                # we need here.
-                logging.error("Tried to add edges from all acceptable states but failed")
+                logging.debug(("Didn't have enough healthy edges from last run to meet "
+                               "edge count - trying to add more edges"))
+                edgelist_changed = True
 
-                # As a last option we add use the last live set of edges, even if
-                # they are unresponsive. This isn't a great option, but it's better
-                # than sending an empty set of edges to the DNS servers.
-                logging.error("Re-adding the last live edges, even though they are failing!")
-                for edgename in self.state_obj.last_live:
-                    self.edgelist_obj.add_edge(edgename, state="pass", live=True)
-                edgelist_changed = False
+                # This loops over the non-canary edges
+                remaining_edges = []
+                for decision_edge, edge_state in six.iteritems(self.decision.current_judgement):
+                    if decision_edge not in self.edgelist_obj.edges:
+                        remaining_edges.append(decision_edge)
+
+                logging.debug("List of previously passing edges is currently %s",
+                              self.edgelist_obj.get_live_edges())
+
+                # Attempt to meet demand starting with the most responsive edge states
+                for desired_state in ["pass_threshold", "pass_window", "pass_average", "pass"]:
+                    needed_edges = required_edge_count - self.edgelist_obj.get_live_count()
+                    filled_by_current_state = self.get_fastest_edges_by_state(remaining_edges,
+                                                                              desired_state,
+                                                                              needed_edges)
+                    for edge in filled_by_current_state:
+                        self.edgelist_obj.add_edge(edge, state=desired_state, live=True)
+
+                    if self.edgelist_obj.get_live_count() == required_edge_count:
+                        logging.info("Filled requirement for %d edges with edges in state %s",
+                                     required_edge_count, desired_state)
+                        break
+                else:
+                    # Entering an "else" in the context of a "for" loop means
+                    # "we didn't break". It's horrible but it's exactly what
+                    # we need here.
+                    logging.error("Tried to add edges from all acceptable states but failed")
+
+                    # As a last option we add use the last live set of edges, even if
+                    # they are unresponsive. This isn't a great option, but it's better
+                    # than sending an empty set of edges to the DNS servers.
+                    logging.error("Re-adding the last live edges, even though they are failing!")
+                    for edgename in self.state_obj.last_live:
+                        self.edgelist_obj.add_edge(edgename, state="pass", live=True)
+                    edgelist_changed = False
 
         if self.edgelist_obj.get_live_count() == required_edge_count:
             logging.info("Successfully established %d edges: %s",

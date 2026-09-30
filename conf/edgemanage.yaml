@@ -95,6 +95,17 @@ edge_count: 4
 dnet_edge_count:
   my_dnet: 6
 
+# Timed rotation, per-dnet, in whole minutes. A dnet listed here serves
+# exactly one edge (edge_count and dnet_edge_count are ignored for it) and
+# moves to a different, randomly chosen healthy edge every N minutes even
+# if the current one is fine. No edge repeats until the others have had a
+# turn. A failing edge is still replaced straight away, which restarts the
+# timer. Rotation is only as fine-grained as your cron, and resolvers may
+# keep the old IP for the zone TTL (300s), so values under 5 are of limited
+# use. See the README.
+dnet_rotation_minutes:
+  my_timed_dnet: 10
+
 # Directory to write completed, full DNS zone files to. If you're
 # using Edgemanage in a live capacity, this should be the directory
 # that your bind instance reads zone files from

@@ -102,6 +102,15 @@ failing, on the grounds that stale edges beat an empty A record set. Edge `mode`
 `force`, `blindforce`, `unavailable`; see [const.py](edgemanage/const.py)) is applied on top and
 is set out-of-band by `edge_conf`.
 
+Dnets listed in the optional `dnet_rotation_minutes` config take a separate path,
+`select_time_rotation_edge()`, which runs *instead of* everything above (the existing block sits
+untouched under an `else:`). Such a dnet serves exactly one edge and replaces it when the timer is
+due, when it fails, or when another edge is in a strictly better tier. The timer is
+`state_obj.last_rotation()`, so a health failover restarts it, with `const.TIME_ROTATION_GRACE` to
+absorb cron jitter. The next edge is random within the best tier among edges not yet in the
+statefile's `rotation_cycle` (a shuffle bag, reset when the tier is used up). `edgelist_changed`
+is derived by comparing against `last_live` rather than by the flag juggling above.
+
 Zone files are rewritten only when the edge list changed, a canary changed, the template's mtime
 changed, or `--force-update` was passed. Both the `for/else` constructs and the mtime bookkeeping
 in `state_obj.zone_mtimes` exist for this; be careful editing them.
@@ -125,7 +134,7 @@ Two flat-file stores, both hand-rolled and both with back-compat quirks:
   `util.open_atomic` because a truncated statefile blocks future runs. Note `fetch_times` keys are
   timestamps cast to **strings**, a documented legacy hack; code reading them does `float(ts)`.
 - **[StateFile](edgemanage/statefile.py)**: one JSON blob per dnet: `last_live`, `last_run`,
-  `rotation_list`, `zone_mtimes`, `active_canaries`. Same pattern: defaults set in `__init__`, then
+  `rotation_list`, `zone_mtimes`, `active_canaries`, `rotation_cycle`. Same pattern: defaults set in `__init__`, then
   overwritten from the loaded dict, so new fields are additive.
 
 Corrupt or unparsable edge state is logged and skipped rather than fatal; several call sites depend
