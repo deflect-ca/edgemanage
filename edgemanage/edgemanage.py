@@ -41,7 +41,11 @@ def future_fetch(edgetest, testobject_host, testobject_path,
         fetch_result = const.FETCH_TIMEOUT
         fetch_status = "fetch_failed"
     except Exception:
+        # Anything else still has to count as a failure, otherwise
+        # fetch_result is unset and the whole run dies on f.result()
         logging.error("Uncaught exception in fetch! %s", traceback.format_exc())
+        fetch_result = const.FETCH_TIMEOUT
+        fetch_status = "fetch_failed"
     return {edgetest.edgename: (fetch_result, fetch_status)}
 
 

@@ -64,13 +64,23 @@ class EdgeTest(object):
         self.edgename = edgename
         self.local_sum = local_sum
 
-    def make_request(self, fetch_host, fetch_object, proto, port, verify):
+    def resolve(self):
+        """
+         Resolve the edge's own address, retrying resolution failures once
+         as EdgeList.resolve_edges does
+        """
+        try:
+            edge_ip = socket.gethostbyname(self.edgename)
+        except socket.gaierror:
+            logging.warning("Retrying resolution of %s", self.edgename)
+            edge_ip = socket.gethostbyname(self.edgename)
+        logging.debug("Resolving %s to %s", self.edgename, edge_ip)
+        return edge_ip
+
+    def make_request(self, edge_ip, fetch_host, fetch_object, proto, port, verify):
         """
          make HTTP request via `requests`
         """
-        edge_ip = socket.gethostbyname(self.edgename)
-        logging.debug("Resolving %s to %s", self.edgename, edge_ip)
-
         with OverrideDNS(fetch_host, edge_ip):
             request_url = six.moves.urllib.parse.urljoin(
                 proto + "://" + fetch_host + ":" + str(port), fetch_object)
@@ -83,7 +93,14 @@ class EdgeTest(object):
          fetch_object: The path to the object to be fetched
         """
         try:
-            response = self.make_request(fetch_host, fetch_object, proto, port, verify)
+            edge_ip = self.resolve()
+        except socket.gaierror as e:
+            # An edge we can't find can't be served either
+            logging.error("Failed to resolve %s: %s", self.edgename, str(e))
+            return const.FETCH_TIMEOUT
+
+        try:
+            response = self.make_request(edge_ip, fetch_host, fetch_object, proto, port, verify)
         except requests.exceptions.Timeout:
             # Just assume it took the maximum amount of time
             return const.FETCH_TIMEOUT
@@ -92,7 +109,8 @@ class EdgeTest(object):
             for i in range(const.FETCH_RETRY-1):
                 logging.warning("Retrying connection to %s", self.edgename)
                 try:
-                    response = self.make_request(fetch_host, fetch_object, proto, port, verify)
+                    response = self.make_request(edge_ip, fetch_host, fetch_object, proto,
+                                                 port, verify)
                     # Request was successful, stop retrying and
                     # continue
                     break
