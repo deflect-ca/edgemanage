@@ -4,7 +4,7 @@ jobs:
     working_directory: ~/equalitie/edgemanage
     parallelism: 1
     docker:
-      - image: circleci/python:3.6
+      - image: cimg/python:3.11.17
     steps:
       - checkout
       - run: sudo apt-get install python-yaml python-requests python-jinja2 python-concurrent.futures python-setuptools python-setproctitle build-essential

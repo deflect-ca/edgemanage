@@ -4,12 +4,11 @@
 # working tree in editable mode so that uncommitted changes are picked up on the
 # next run without a rebuild.
 #
-# Base is python:3.9 rather than debian:buster-slim because buster is EOL (its
-# apt repos are archived) and because requirements.txt pins setproctitle==1.1.10
-# and ipaddr==2.2.0, which have no wheels for modern interpreters. Bookworm rather
-# than bullseye: the bullseye index on deb.debian.org currently 404s on superseded
+# Base is python:3.11.17, production's Python, rather than debian:buster-slim
+# because buster is EOL (its apt repos are archived). Bookworm rather than
+# bullseye: the bullseye index on deb.debian.org currently 404s on superseded
 # package versions.
-FROM python:3.9-slim-bookworm
+FROM python:3.11.17-slim-bookworm
 
 # bind9-utils provides rndc, bind9-dnsutils provides dig for poking at the bind
 # container from here.

@@ -4,8 +4,8 @@
 # its paths, so it inherits the real `prometheus_logs` (/var/log/prom/) and
 # `named_dir` (/var/cache/bind/) from that file. Neither exists on a developer
 # laptop, which is why those tests fail there and pass in here: this image
-# creates them. Same 3.9 base as docker/edgemanage/Dockerfile.
-FROM python:3.9-slim-bookworm
+# creates them. Same 3.11.17 base as docker/edgemanage/Dockerfile.
+FROM python:3.11.17-slim-bookworm
 
 # The paths conf/edgemanage.yaml refers to and the integration suite does not
 # override. /var/log/prom is the one the prometheus textfile writer needs.

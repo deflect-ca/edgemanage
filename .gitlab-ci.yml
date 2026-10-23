@@ -1,0 +1,73 @@
+# Mirrors the GitHub Actions workflows in .github/workflows/: tox
+# (python-app.yml), version-check and pip-audit. Keep the two in step.
+
+# An MR pipeline when the branch has an open MR, otherwise a branch pipeline,
+# so a push never starts both. Plus the weekly schedule (Build > Pipeline
+# schedules) and manual runs.
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+variables:
+  # Production's Python, as in python-app.yml. Not PYTHON_VERSION: the python
+  # images set that themselves and a global variable would override it.
+  PROD_PYTHON_VERSION: "3.11.17"
+
+# Lint and unit/integration tests, as python-app.yml runs on every push. Not
+# on the schedule, which is for the audits.
+tox:
+  image: python:${PROD_PYTHON_VERSION}-bookworm
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - when: on_success
+  script:
+    - python -m pip install --upgrade pip
+    - pip install -r requirements.txt
+    - pip install -r test-requirements.txt
+    - pip install tox
+    - tox
+  artifacts:
+    name: code-coverage-report
+    paths:
+      - htmlcov
+
+# Newer releases of everything pinned outside pip-audit's lockfiles: base
+# images, build-arg versions, the Python version, actions, inline installs.
+# Each pin is rated by RISK_RULES in the script; only a patch release of a
+# high-risk pin turns the job into a warning. Never blocks a pipeline.
+version-check:
+  # The full (non-slim) image: it includes git for ls-remote.
+  image: python:${PROD_PYTHON_VERSION}-bookworm
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+  allow_failure: true
+  before_script: []
+  cache: []
+  script:
+    - python3 scripts/check_versions.py
+
+# Known advisories in the pinned Python dependencies. Runs on every MR, so a
+# new upstream disclosure blocks the next MR until it is fixed or accepted.
+pip-audit:
+  image: python:${PROD_PYTHON_VERSION}-slim-bookworm
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+  before_script: []
+  script:
+    - pip install pip-audit==2.10.1
+    # Both locks are uv-compiled with hashes, so every transitive dependency is
+    # already pinned: --disable-pip --require-hashes audits the pins as
+    # written. (--no-deps is implied by --require-hashes.)
+    - >-
+      pip-audit --progress-spinner off --disable-pip --require-hashes
+      -r requirements.txt -r test-requirements.txt

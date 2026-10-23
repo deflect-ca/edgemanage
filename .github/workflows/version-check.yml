@@ -1,0 +1,20 @@
+# Newer releases of everything pinned outside pip-audit's lockfiles: base
+# images, build-arg versions, the Python version, actions, inline installs.
+# Each pin is rated by RISK_RULES in the script; only a patch release of a
+# high-risk pin warns, as annotations on the PR. Never fails the run.
+name: version-check
+on:
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+jobs:
+  version-check:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11.17"
+      - run: python3 scripts/check_versions.py

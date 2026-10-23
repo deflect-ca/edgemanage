@@ -5,7 +5,7 @@
 # by hand:
 #
 #   uv pip compile test-requirements.in -o test-requirements.txt \
-#       --python-version 3.9 --generate-hashes -c requirements.txt
+#       --python-version 3.11 --generate-hashes -c requirements.txt
 #
 # The `-c requirements.txt` keeps shared packages (Jinja2, MarkupSafe, ...) at
 # the versions the runtime lock already chose.
