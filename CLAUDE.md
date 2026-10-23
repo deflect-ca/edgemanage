@@ -62,7 +62,14 @@ The service is behind a `test` profile, so `docker compose up` ignores it. Do no
 
 CI is GitHub Actions ([.github/workflows/python-app.yml](.github/workflows/python-app.yml)) on
 Python 3.9.25 running `tox`. A legacy CircleCI config is still present but the Actions workflow is
-the live one.
+the live one. Two more workflows, `pip-audit` and `version-check`, watch the pinned versions; see
+"Pinned versions and CI audits" below.
+
+The GitLab mirror runs the same three jobs from [.gitlab-ci.yml](.gitlab-ci.yml): `tox`,
+`version-check` and `pip-audit`. **Change both CI systems together.** Its `workflow: rules:` run an
+MR pipeline when the branch has an open MR and a branch pipeline otherwise, so a push never starts
+both; `tox` runs in either but not on the schedule. The production Python version is the
+`PROD_PYTHON_VERSION` variable there, the literal `python-version` in the GitHub workflows.
 
 ## Architecture
 
@@ -159,3 +166,63 @@ point used by Django callers to read config and reconcile dnet edge-list files.
 - The config key `testing: true` changes behavior (raw IP sent as the `Host` header, `timeout`
   overrides `FETCH_TIMEOUT`) and exists for the integration suite.
 - Branches: `develop` is the main branch; releases and hotfixes merge via PR.
+
+## Pinned versions and CI audits
+
+Every pinned version is watched by exactly one of two jobs, defined both as GitHub Actions
+workflows and in `.gitlab-ci.yml`. Both run on every pull/merge request (no path or `changes:`
+filters), on a weekly schedule, and on manual runs. On GitHub the schedule is in the workflow
+(Monday 06:00 UTC, `develop` only); on GitLab it is a pipeline schedule set in the project
+settings (Build > Pipeline schedules), not in the repo.
+
+- **`pip-audit`** ([.github/workflows/pip-audit.yml](.github/workflows/pip-audit.yml)) owns
+  `requirements.txt` and `test-requirements.txt`. It checks both locks against known advisories
+  and **blocks** the PR when it finds one, so a new upstream disclosure blocks the next PR whatever
+  it touches. It runs on Python 3.14 because pip-audit needs 3.10+; the locks have no environment
+  markers, so the result does not depend on the interpreter.
+  - **Prefer a fix.** Bump the package in the `.in` file (or `constraints.txt` for a transitive
+    pin) and re-lock moving only that package: `uv pip compile ... --upgrade-package <pkg>`.
+    Runtime pins track the production `pip freeze`, so a runtime fix is also a production upgrade.
+  - **Accept an advisory only with an owner's approval**: add `--ignore-vuln <ID>` to the workflow
+    with a comment naming the advisory, why it does not apply, and when to revisit it.
+- **`version-check`** ([.github/workflows/version-check.yml](.github/workflows/version-check.yml))
+  owns everything else: Docker base images, the Python version, GitHub Actions `uses:` pins,
+  `*_VERSION` build args and inline `pip install x==1.2.3` lines. It runs
+  [scripts/check_versions.py](scripts/check_versions.py) (stdlib only, `python3
+  scripts/check_versions.py` from the repo root), which rates each pin high or low by `RISK_RULES`.
+  It **never blocks**: a high-risk pin with a newer patch release turns the job into a warning
+  with annotations on the PR, and everything else is listed for information.
+
+Nothing in this repo is deployed (`docker/` is a local harness), so almost every pin is low risk.
+The high-risk pins are the ones kept in step with production's Python, where `edge_manage`
+parses responses from internet edges: `python-version` in `python-app.yml`, `PROD_PYTHON_VERSION`
+in `.gitlab-ci.yml` and the base image of `docker/edgemanage/Dockerfile`. (The pip-audit
+`python:3.14` image in `.gitlab-ci.yml` is rated high too, since the rule is per file; it floats,
+so it can never warn.)
+
+Reading the report:
+
+- `PATCH`: a newer patch release exists. Bump it (and rebuild the image).
+- `MINOR`: only a newer minor exists. Information only; plan it as an upgrade.
+- `ERROR`: a registry lookup failed. Re-run the job.
+- `UNCHECKED`: a `*_VERSION` variable has no `VERSION_VARS` entry.
+- `SKIPPED`: the tag is not a version (e.g. `debian:bookworm-slim`), the registry is not Docker
+  Hub, or the action is pinned to a commit SHA.
+
+**Whenever you add or change a Dockerfile, compose file, CI file, `.python-version` /
+`.tool-versions`, or a requirements file, read and update `scripts/check_versions.py` in the same
+change.** Nothing fails loudly when this is missed.
+
+1. A new service, image, or change in exposure needs a `RISK_RULES` entry or adjustment: a
+   published port, a bind address moving off loopback, a new reverse-proxy upstream, a harness
+   image that starts tracking production, or the reverse of any of these.
+2. A new `ARG`/`ENV`/CI variable ending in `VERSION` needs a `VERSION_VARS` entry, or it reports
+   as `UNCHECKED`.
+3. A file in a new location or with a new name needs a glob in `DOCKER_FILES` / `TOOLCHAIN_FILES` /
+   `REQUIREMENTS_FILES`. A renamed file also silently stops matching its `RISK_RULES` glob.
+4. A pin the script cannot see needs to move into a `*_VERSION` arg, or needs a discovery change:
+   a non-Docker-Hub registry, a version hardcoded in a URL, an apt `=` pin.
+5. A new requirements file must be owned by exactly one job: add it to the `pip-audit` command or
+   to `REQUIREMENTS_FILES`.
+6. Verify with `python3 scripts/check_versions.py`: the pin is in the table with the right RISK
+   and WHY.
