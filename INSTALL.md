@@ -30,14 +30,14 @@ files are generated output and should not be edited directly.
 | `test-requirements.txt` | generated test lock (pinned + hashes) |
 
 To change a dependency, edit the relevant `.in` file and recompile.
-The target is Python 3.9, matching CI and the docker image:
+The target is Python 3.11, matching CI and the docker images:
 
 ```bash
 uv pip compile requirements.in -o requirements.txt \
-    --python-version 3.9 --generate-hashes
+    --python-version 3.11 --generate-hashes
 
 uv pip compile test-requirements.in -o test-requirements.txt \
-    --python-version 3.9 --generate-hashes -c requirements.txt
+    --python-version 3.11 --generate-hashes -c requirements.txt
 ```
 
 Recompile the runtime lock first: the test lock constrains itself

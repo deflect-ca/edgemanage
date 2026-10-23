@@ -1,4 +1,4 @@
-FROM python:3.9-slim-bookworm
+FROM python:3.11.17-slim-bookworm
 
 # Stands in for an edge or a canary. Stdlib only, so there is nothing to install.
 COPY docker/origin/server.py /usr/local/bin/origin_server.py

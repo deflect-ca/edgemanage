@@ -16,7 +16,7 @@ workflow:
 variables:
   # Production's Python, as in python-app.yml. Not PYTHON_VERSION: the python
   # images set that themselves and a global variable would override it.
-  PROD_PYTHON_VERSION: "3.9.25"
+  PROD_PYTHON_VERSION: "3.11.17"
 
 # Lint and unit/integration tests, as python-app.yml runs on every push. Not
 # on the schedule, which is for the audits.
@@ -57,10 +57,7 @@ version-check:
 # Known advisories in the pinned Python dependencies. Runs on every MR, so a
 # new upstream disclosure blocks the next MR until it is fixed or accepted.
 pip-audit:
-  # pip-audit needs Python >= 3.10, newer than the project's 3.9. The locks
-  # carry no environment markers, so the interpreter does not change what is
-  # audited.
-  image: python:3.14-slim-bookworm
+  image: python:${PROD_PYTHON_VERSION}-slim-bookworm
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_PIPELINE_SOURCE == "schedule"

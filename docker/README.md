@@ -320,9 +320,8 @@ Raising `workers` is the quickest way to observe that; leave it at 1 for results
 
 ## Differences from the production image
 
-- Base is `python:3.9-slim-bookworm`, not `debian:buster-slim`. Buster is EOL and its apt repos are
-  archived, and `requirements.txt` pins `ipaddr==2.2.0`, which has no wheel for modern
-  interpreters. The image installs via `setup.py`'s unpinned `install_requires` instead, unlike the
+- Base is `python:3.11.17-slim-bookworm`, not `debian:buster-slim`. Buster is EOL and its apt
+  repos are archived. The image installs via `setup.py`'s unpinned `install_requires`, unlike the
   test image, which installs the hash-checked locks.
 - edgemanage is installed from the local checkout, not `pip install git+https://...`.
 - A shell loop replaces cron, so logs go to stdout.

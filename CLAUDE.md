@@ -28,9 +28,9 @@ against it):
 
 ```bash
 uv pip compile requirements.in -o requirements.txt \
-    --python-version 3.9 --generate-hashes
+    --python-version 3.11 --generate-hashes
 uv pip compile test-requirements.in -o test-requirements.txt \
-    --python-version 3.9 --generate-hashes -c requirements.txt
+    --python-version 3.11 --generate-hashes -c requirements.txt
 ```
 
 Runtime versions are pinned to the production server's `pip freeze`, with transitive pins held in
@@ -61,7 +61,7 @@ The service is behind a `test` profile, so `docker compose up` ignores it. Do no
 `/var/log/prom/` failure by editing the config or the test.
 
 CI is GitHub Actions ([.github/workflows/python-app.yml](.github/workflows/python-app.yml)) on
-Python 3.9.25 running `tox`. A legacy CircleCI config is still present but the Actions workflow is
+Python 3.11.17 running `tox`. A legacy CircleCI config is still present but the Actions workflow is
 the live one. Two more workflows, `pip-audit` and `version-check`, watch the pinned versions; see
 "Pinned versions and CI audits" below.
 
@@ -178,8 +178,7 @@ settings (Build > Pipeline schedules), not in the repo.
 - **`pip-audit`** ([.github/workflows/pip-audit.yml](.github/workflows/pip-audit.yml)) owns
   `requirements.txt` and `test-requirements.txt`. It checks both locks against known advisories
   and **blocks** the PR when it finds one, so a new upstream disclosure blocks the next PR whatever
-  it touches. It runs on Python 3.14 because pip-audit needs 3.10+; the locks have no environment
-  markers, so the result does not depend on the interpreter.
+  it touches.
   - **Prefer a fix.** Bump the package in the `.in` file (or `constraints.txt` for a transitive
     pin) and re-lock moving only that package: `uv pip compile ... --upgrade-package <pkg>`.
     Runtime pins track the production `pip freeze`, so a runtime fix is also a production upgrade.
@@ -196,9 +195,7 @@ settings (Build > Pipeline schedules), not in the repo.
 Nothing in this repo is deployed (`docker/` is a local harness), so almost every pin is low risk.
 The high-risk pins are the ones kept in step with production's Python, where `edge_manage`
 parses responses from internet edges: `python-version` in `python-app.yml`, `PROD_PYTHON_VERSION`
-in `.gitlab-ci.yml` and the base image of `docker/edgemanage/Dockerfile`. (The pip-audit
-`python:3.14` image in `.gitlab-ci.yml` is rated high too, since the rule is per file; it floats,
-so it can never warn.)
+in `.gitlab-ci.yml` and the base image of `docker/edgemanage/Dockerfile`.
 
 Reading the report:
 

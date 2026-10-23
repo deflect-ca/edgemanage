@@ -11,12 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      # pip-audit needs Python >= 3.10, newer than the project's 3.9. The locks
-      # carry no environment markers, so the interpreter does not change what
-      # is audited.
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.14"
+          python-version: "3.11.17"
       - run: pip install pip-audit==2.10.1
       # Both locks are uv-compiled with hashes, so every transitive dependency
       # is already pinned: --disable-pip --require-hashes audits the pins as

@@ -83,9 +83,7 @@ HIGH, LOW = "high", "low"
 # quietly downgraded. Nothing in this repo is deployed: docker/ is a local
 # harness. The Python pins rated high are the ones kept in step with
 # production, where edge_manage fetches from and parses responses of internet
-# edges. In .gitlab-ci.yml that is PROD_PYTHON_VERSION; the rule cannot tell it
-# from pip-audit's floating python:3.14 image, which is rated high too but can
-# never have a patch upgrade, so never warns.
+# edges. In .gitlab-ci.yml that is PROD_PYTHON_VERSION.
 RISK_RULES = [
     (".github/workflows/python-app.yml", "python", HIGH, "tracks production Python"),
     (".gitlab-ci.yml", "python", HIGH, "tox job tracks production Python"),
